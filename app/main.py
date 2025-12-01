@@ -10,7 +10,7 @@ try:
     import xgboost as xgb
 except Exception:
     xgb = None
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE 
 
 APP_TITLE = "Finance Stock Prediction API"
 MODEL_REGISTRY = os.path.join(os.path.dirname(__file__), "..", "ml", "registry")
