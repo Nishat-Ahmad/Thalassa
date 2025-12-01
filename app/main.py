@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, UploadFile, File, HTTPException
+from fastapi import Form
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -17,6 +18,8 @@ MODEL_REGISTRY = os.path.join(os.path.dirname(__file__), "..", "ml", "registry")
 MODEL_PATH = os.path.join(MODEL_REGISTRY, "baseline_model.json")
 XGB_META_PATH = os.path.join(MODEL_REGISTRY, "xgb_model.json")
 XGB_MODEL_PATH = os.path.join(MODEL_REGISTRY, "xgb_model.ubj")
+XGB_CLS_META_PATH = os.path.join(MODEL_REGISTRY, "xgb_classifier.json")
+XGB_CLS_MODEL_PATH = os.path.join(MODEL_REGISTRY, "xgb_classifier.ubj")
 TRAIN_SCRIPT = os.path.join(os.path.dirname(__file__), "..", "ml", "train_baseline.py")
 
 BASE_DIR = os.path.dirname(__file__)
@@ -44,6 +47,19 @@ def load_xgb():
     meta_feats = [f[0] if isinstance(f, (list, tuple)) else f for f in raw_feats]
     # Authoritative feature names from booster (may include ticker suffixes / spaces)
     booster_feats = booster.feature_names or meta_feats
+    return booster, booster_feats
+
+def load_xgb_classifier():
+    if xgb is None:
+        return None, None
+    if not (os.path.exists(XGB_CLS_MODEL_PATH) and os.path.exists(XGB_CLS_META_PATH)):
+        return None, None
+    booster = xgb.Booster()
+    booster.load_model(XGB_CLS_MODEL_PATH)
+    with open(XGB_CLS_META_PATH, "r") as f:
+        meta = json.load(f)
+    feats = [str(f) for f in meta.get("features", [])]
+    booster_feats = booster.feature_names or feats
     return booster, booster_feats
 
 def align_to_booster_features(df: pd.DataFrame, booster_feats: list[str]) -> pd.DataFrame:
@@ -95,6 +111,10 @@ def model_info():
         with open(XGB_META_PATH, "r") as f:
             xgb_meta = json.load(f)
         meta["xgb"] = xgb_meta
+    if os.path.exists(XGB_CLS_META_PATH):
+        with open(XGB_CLS_META_PATH, "r") as f:
+            xgb_cls_meta = json.load(f)
+        meta["xgb_classifier"] = xgb_cls_meta
     return meta
 
 @app.get("/expected-features")
@@ -105,6 +125,15 @@ def expected_features():
         meta = json.load(f)
     raw_feats = meta.get("features", [])
     feats = [f[0] if isinstance(f, (list, tuple)) else f for f in raw_feats]
+    return {"features": feats}
+
+@app.get("/expected-features-class")
+def expected_features_class():
+    if not os.path.exists(XGB_CLS_META_PATH):
+        raise HTTPException(status_code=404, detail="No trained classifier found")
+    with open(XGB_CLS_META_PATH, "r") as f:
+        meta = json.load(f)
+    feats = [str(f) for f in meta.get("features", [])]
     return {"features": feats}
 
 @app.get("/data", response_class=HTMLResponse)
@@ -126,6 +155,32 @@ def contact_page(request: Request):
 @app.get("/upload", response_class=HTMLResponse)
 def upload_page(request: Request):
     return templates.TemplateResponse("upload.html", {"request": request, "title": "Upload", "year": datetime.datetime.now().year})
+
+@app.get("/classify", response_class=HTMLResponse)
+def classify_page(request: Request):
+    feats = []
+    if os.path.exists(XGB_CLS_META_PATH):
+        with open(XGB_CLS_META_PATH, "r") as f:
+            meta = json.load(f)
+        feats = [str(f) for f in meta.get("features", [])]
+    return templates.TemplateResponse("classify.html", {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feats})
+
+@app.post("/classify", response_class=HTMLResponse)
+def classify_submit(request: Request, values: str = Form(...)):
+    booster, feat_names = load_xgb_classifier()
+    if booster is None or not feat_names:
+        return templates.TemplateResponse("classify.html", {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": [], "result": None})
+    try:
+        nums = [float(x.strip()) for x in values.split(",") if x.strip() != ""]
+    except Exception:
+        return templates.TemplateResponse("classify.html", {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": None})
+    if len(nums) != len(feat_names):
+        return templates.TemplateResponse("classify.html", {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": None})
+    df = pd.DataFrame([nums], columns=[f.strip() for f in feat_names])
+    dmatrix = xgb.DMatrix(df)
+    proba = float(booster.predict(dmatrix)[0])
+    result = {"proba_up": proba, "label": int(proba >= 0.5)}
+    return templates.TemplateResponse("classify.html", {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": result})
 
 @app.post("/predict")
 def predict(req: PredictRequest):
@@ -151,6 +206,19 @@ def predict(req: PredictRequest):
     x = np.array(req.features, dtype=float)
     y = float(np.dot(x, weights))
     return {"model": "baseline", "prediction": y}
+
+@app.post("/predict-class")
+def predict_class(req: PredictRequest):
+    booster, feat_names = load_xgb_classifier()
+    if booster is None or not feat_names:
+        raise HTTPException(status_code=400, detail="Classifier not available. Train it first.")
+    if len(req.features) != len(feat_names):
+        raise HTTPException(status_code=400, detail=f"Expected {len(feat_names)} features, got {len(req.features)}")
+    df = pd.DataFrame([req.features], columns=[f.strip() for f in feat_names])
+    dmatrix = xgb.DMatrix(df)
+    proba = float(booster.predict(dmatrix)[0])
+    label = int(proba >= 0.5)
+    return {"model": "xgb_classifier", "proba_up": proba, "label": label}
 
 @app.post("/upload", response_class=HTMLResponse)
 async def upload_csv(request: Request, file: UploadFile = File(...)):

@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="section-header">
+  <h1>Single Classification</h1>
+  <p class="muted">Enter comma-separated feature values matching the trained classifier's expected features.</p>
+</section>
+
+<section class="panel">
+  <p><strong>Expected Features:</strong></p>
+  {% if features %}
+    <code style="display:block;white-space:pre-wrap">{{ features|join(', ') }}</code>
+  {% else %}
+    <p class="muted">Classifier not trained yet. Train the classifier or run the pipeline.</p>
+  {% endif %}
+</section>
+
+<form action="/classify" method="post" class="form">
+  <div class="form-control">
+    <label for="values">Feature Values (comma-separated)</label>
+    <input id="values" type="text" name="values" placeholder="e.g. 0.1, 0.2, 0.3, ..." required />
+    <small class="hint">Order must match the expected features above.</small>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">Classify</button>
+    <a class="btn btn-outline" href="/expected-features-class" target="_blank">Open features JSON</a>
+  </div>
+</form>
+
+{% if result %}
+<section class="panel" style="margin-top:16px">
+  <h3>Result</h3>
+  <p>Probability Up: <strong>{{ '%.4f'|format(result.proba_up) }}</strong></p>
+  <p>Label: <strong>{{ result.label }}</strong> (1 = Up, 0 = Down)</p>
+</section>
+{% endif %}
+
+{% endblock %}

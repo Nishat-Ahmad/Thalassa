@@ -2,6 +2,7 @@ from prefect import flow, task
 import os, pandas as pd, numpy as np, json
 import yfinance as yf
 from datetime import datetime, UTC
+from subprocess import Popen, PIPE
 
 try:
     import xgboost as xgb
@@ -117,12 +118,27 @@ def train(feature_path: str):
         json.dump(meta, f)
     return os.path.join(REGISTRY_DIR, "xgb_model.json")
 
+@task
+def train_classification(feature_path: str):
+    """Run classification trainer script to produce XGB classifier artifacts."""
+    script = os.path.join(os.path.dirname(__file__), "..", "ml", "train_classification.py")
+    process = Popen(["python", script], stdout=PIPE, stderr=PIPE)
+    stdout, stderr = process.communicate()
+    if process.returncode != 0:
+        raise RuntimeError(f"Classification training failed: {stderr.decode()}")
+    try:
+        result = json.loads(stdout.decode())
+    except Exception:
+        result = {"status": "success"}
+    return result
+
 @flow
 def pipeline(ticker: str = "AAPL"):
     p = ingest(ticker)
     f = engineer(p)
     m = train(f)
-    return m
+    cls = train_classification(f)
+    return {"regression": m, "classification": cls}
 
 if __name__ == "__main__":
     pipeline()
