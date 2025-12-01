@@ -2,25 +2,39 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>{{ title or 'Finance ML Platform' }}</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title or 'FinSight · Finance ML Platform' }}</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <meta name="color-scheme" content="light dark" />
 </head>
 <body>
-  <nav class="nav">
-    <div class="brand">FinSight</div>
-    <ul class="links">
-      <li><a href="/">Home</a></li>
-      <li><a href="/data">Data</a></li>
-      <li><a href="/tasks">ML Tasks</a></li>
-      <li><a href="/roadmap">Roadmap</a></li>
-      <li><a href="/upload">Upload</a></li>
-      <li><a href="/contact">Contact</a></li>
-    </ul>
-  </nav>
-  <main class="content">
+  <header class="site-header">
+    <nav class="nav container">
+      <a href="/" class="brand">FinSight</a>
+      <input id="nav-toggle" type="checkbox" class="nav-toggle" aria-label="Toggle navigation" />
+      <label for="nav-toggle" class="nav-toggle-label" aria-hidden="true">☰</label>
+      <ul class="links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/data">Data</a></li>
+        <li><a href="/tasks">ML Tasks</a></li>
+        <li><a href="/roadmap">Roadmap</a></li>
+        <li><a href="/upload">Upload</a></li>
+        <li><a href="/contact">Contact</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="content container">
     {% block content %}{% endblock %}
   </main>
-  <footer class="footer">&copy; {{ year }} FinSight Platform (Finance & Economics Domain)</footer>
+
+  <footer class="footer">
+    <div class="container">
+      <span>&copy; {{ year }} FinSight — Finance & Economics ML Platform</span>
+      <span class="sep">•</span>
+      <a class="link-muted" href="/docs">API Docs</a>
+    </div>
+  </footer>
+  
 </body>
 </html>

@@ -1,12 +1,23 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1>Data Overview</h1>
-<p>Placeholder page. Will list ingested tickers, date ranges, data freshness, missing values stats.</p>
-<table class="table">
-  <thead><tr><th>Ticker</th><th>Start</th><th>End</th><th>Rows</th><th>Status</th></tr></thead>
-  <tbody>
-    <tr><td>AAPL</td><td>-</td><td>-</td><td>-</td><td>Not ingested yet</td></tr>
-    <tr><td>MSFT</td><td>-</td><td>-</td><td>-</td><td>Not ingested yet</td></tr>
-  </tbody>
-</table>
+<section class="section-header">
+  <h1>Data Overview</h1>
+  <p class="muted">This page will list ingested tickers, date ranges, freshness, and missing value statistics.</p>
+  <div class="toolbar">
+    <a class="btn" href="/tasks">Go to ML Tasks</a>
+    <a class="btn btn-outline" href="/model-info">Model Info</a>
+  </div>
+  </section>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Ticker</th><th>Start</th><th>End</th><th>Rows</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>AAPL</td><td>—</td><td>—</td><td>—</td><td><span class="badge">Not ingested</span></td></tr>
+        <tr><td>MSFT</td><td>—</td><td>—</td><td>—</td><td><span class="badge">Not ingested</span></td></tr>
+      </tbody>
+    </table>
+  </div>
 {% endblock %}

@@ -1,10 +1,25 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1>Contact & Support</h1>
-<p>This page will later include live system status, build number, model versions, and links to documentation.</p>
-<ul>
-  <li>API Docs: <a href="/docs">/docs</a></li>
-  <li>Health Check: <code>/health</code></li>
-  <li>Model Info: <code>/model-info</code></li>
-</ul>
+<section class="section-header">
+  <h1>Contact & Support</h1>
+  <p class="muted">Find quick links and system endpoints below.</p>
+</section>
+
+<section class="cards">
+  <article class="card">
+    <h3>API Docs</h3>
+    <p>Interactive Swagger UI for exploring endpoints.</p>
+    <a class="btn btn-primary" href="/docs">Open /docs</a>
+  </article>
+  <article class="card">
+    <h3>Health Check</h3>
+    <p>Verify the API is alive and responsive.</p>
+    <a class="btn" href="/health">Open /health</a>
+  </article>
+  <article class="card">
+    <h3>Model Info</h3>
+    <p>See current model metadata and expected features.</p>
+    <a class="btn" href="/model-info">Open /model-info</a>
+  </article>
+</section>
 {% endblock %}

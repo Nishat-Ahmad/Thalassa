@@ -1,14 +1,47 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1>ML Tasks (Planned)</h1>
-<ul class="tasks">
-  <li><strong>Regression:</strong> Predict next-day returns.</li>
-  <li><strong>Classification:</strong> Direction (Up/Down) probability.</li>
-  <li><strong>Time Series:</strong> Multi-horizon forecasting.</li>
-  <li><strong>Dimensionality Reduction:</strong> PCA for factor extraction.</li>
-  <li><strong>Clustering:</strong> Group similar volatility/return profiles.</li>
-  <li><strong>Recommendation:</strong> Similar ticker/portfolio suggestions.</li>
-  <li><strong>Association:</strong> Event co-movement patterns.</li>
-</ul>
-<p>Each task will have a dedicated dataset snapshot, training pipeline segment, and evaluation metrics visualized here.</p>
+<section class="section-header">
+  <h1>ML Tasks</h1>
+  <p class="muted">Planned end-to-end tasks to showcase a real-world pipeline.</p>
+</section>
+
+<section class="cards">
+  <article class="card">
+    <h3>Regression</h3>
+    <p>Predict next-day returns with tree-based models.</p>
+  </article>
+  <article class="card">
+    <h3>Classification</h3>
+    <p>Up/Down direction probabilities with calibrated outputs.</p>
+  </article>
+  <article class="card">
+    <h3>Time Series</h3>
+    <p>Multi-horizon forecasts with lagged and seasonal features.</p>
+  </article>
+  <article class="card">
+    <h3>Dimensionality Reduction</h3>
+    <p>PCA/autoencoders for factor extraction and denoising.</p>
+  </article>
+  <article class="card">
+    <h3>Clustering</h3>
+    <p>Market regime discovery via volatility/return profiles.</p>
+  </article>
+  <article class="card">
+    <h3>Recommendation</h3>
+    <p>Peer ticker suggestions by factor and correlation similarity.</p>
+  </article>
+  <article class="card">
+    <h3>Association</h3>
+    <p>Event co-movement patterns and frequent itemsets.</p>
+  </article>
+</section>
+
+<section class="panel">
+  <p>Each task will expose datasets, training steps, and evaluation metrics with CI gates and Prefect orchestration.</p>
+  <div class="toolbar">
+    <a class="btn btn-primary" href="/upload">Try Batch Predict</a>
+    <a class="btn btn-outline" href="/roadmap">See Roadmap</a>
+  </div>
+  
+</section>
 {% endblock %}

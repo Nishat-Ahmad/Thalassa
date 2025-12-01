@@ -1,31 +1,44 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1>Finance & Economics ML Platform</h1>
-<p>This web interface will evolve into an end-to-end MLOps system covering ingestion, feature storage, model registry, CI/CD, orchestration, monitoring, and multi-task ML (regression, classification, clustering, dimensionality reduction, recommendation, time series, association).</p>
+
+<section class="hero">
+  <div class="hero-content">
+    <h1 class="hero-title">Finance & Economics ML Platform</h1>
+    <p class="hero-subtitle">Production-grade FastAPI + Prefect orchestration + CI/CD + Docker. Train, serve, and monitor ML models end-to-end.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="/upload">Batch Predict</a>
+      <a class="btn" href="/data">View Data</a>
+      <a class="btn" href="/tasks">ML Tasks</a>
+    </div>
+  </div>
+</section>
+
+<section class="cards">
+  <article class="card">
+    <h3>Data Ingestion</h3>
+    <p>Historical OHLCV via pipelines. Resampling, cleaning, and validation.</p>
+  </article>
+  <article class="card">
+    <h3>Feature Engineering</h3>
+    <p>SMA/EMA, RSI, MACD, volatility, and lagged features for modeling.</p>
+  </article>
+  <article class="card">
+    <h3>Model Registry</h3>
+    <p>Versioned artifacts with metrics and schema for safe deployment.</p>
+  </article>
+  <article class="card">
+    <h3>Monitoring</h3>
+    <p>Planned drift checks and alerts to keep performance on track.</p>
+  </article>
+</section>
+
 <section class="panel">
   <h2>Current Status</h2>
-  <ul>
-    <li>Website scaffold created.</li>
-    <li>API baseline endpoints running.</li>
-    <li>Prefect flow prototype exists.</li>
+  <ul class="list">
+    <li>Website + API running</li>
+    <li>Prefect flow prototype implemented</li>
+    <li>XGBoost baseline trained and served</li>
   </ul>
 </section>
-<section class="grid">
-  <div class="card">
-    <h3>Upcoming: Data Ingestion</h3>
-    <p>Stream & batch historical OHLCV data, fundamentals.</p>
-  </div>
-  <div class="card">
-    <h3>Upcoming: Feature Store</h3>
-    <p>Technical indicators, volatility, engineered factors.</p>
-  </div>
-  <div class="card">
-    <h3>Upcoming: Model Registry</h3>
-    <p>Versioned artifacts, metrics, promotion gates.</p>
-  </div>
-  <div class="card">
-    <h3>Upcoming: Monitoring</h3>
-    <p>Data & concept drift, performance decay alerts.</p>
-  </div>
-</section>
+
 {% endblock %}
