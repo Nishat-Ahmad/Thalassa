@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Batch Prediction Upload</h1>
+<p>Upload a CSV containing the model feature columns. After training XGBoost, this will return predictions for each row.</p>
+<form action="/predict-batch" method="post" enctype="multipart/form-data" class="panel">
+  <input type="file" name="file" accept=".csv" required />
+  <button type="submit">Upload & Predict</button>
+</form>
+<p>Need the expected columns? Train the model, then check <code>/model-info</code> or the registry JSON.</p>
+{% endblock %}

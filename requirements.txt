@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+prefect
+yfinance
+pandas
+numpy
+scikit-learn
+deepchecks[ml]
+pytest
+python-multipart
+xgboost

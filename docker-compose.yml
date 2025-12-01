@@ -1,0 +1,13 @@
+version: '3.9'
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - PREFECT_API_URL=http://prefect:4200/api
+  prefect:
+    image: prefecthq/prefect:2-latest
+    command: prefect server start
+    ports:
+      - "4200:4200"
