@@ -3,6 +3,14 @@ import os, pandas as pd, numpy as np, json
 import yfinance as yf
 from datetime import datetime, UTC
 from subprocess import Popen, PIPE
+try:
+    from sklearn.decomposition import PCA
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import StandardScaler
+except Exception:
+    PCA = None
+    KMeans = None
+    StandardScaler = None
 
 try:
     import xgboost as xgb
@@ -132,13 +140,75 @@ def train_classification(feature_path: str):
         result = {"status": "success"}
     return result
 
+@task
+def compute_pca(feature_path: str, n_components: int = 5):
+    if PCA is None:
+        return {"status": "skipped", "reason": "sklearn not available"}
+    df = pd.read_parquet(feature_path)
+    feature_cols = [c for c in df.columns if c not in ["date", "ticker"] and pd.api.types.is_numeric_dtype(df[c])]
+    X = df[feature_cols].replace([np.inf, -np.inf], np.nan).dropna()
+    if X.empty:
+        return {"status": "skipped", "reason": "no data"}
+    pca = PCA(n_components=min(n_components, X.shape[1]))
+    comps = pca.fit_transform(X)
+    meta = {
+        "name": "pca_features",
+        "created_at": datetime.now(UTC).isoformat(),
+        "n_components": int(pca.n_components_),
+        "explained_variance_ratio": pca.explained_variance_ratio_.tolist(),
+        "components": pca.components_.tolist(),
+        "feature_order": feature_cols,
+    }
+    with open(os.path.join(REGISTRY_DIR, "pca.json"), "w") as f:
+        json.dump(meta, f)
+    # Persist transformed sample for potential downstream use
+    np.save(os.path.join(REGISTRY_DIR, "pca_transformed.npy"), comps)
+    return {"status": "ok", "pca_meta": meta}
+
+@task
+def cluster_features(feature_path: str, n_clusters: int = 5):
+    if KMeans is None:
+        return {"status": "skipped", "reason": "sklearn not available"}
+    df = pd.read_parquet(feature_path)
+    feature_cols = [c for c in df.columns if c not in ["date", "ticker"] and pd.api.types.is_numeric_dtype(df[c])]
+    X = df[feature_cols].replace([np.inf, -np.inf], np.nan).dropna()
+    if len(X) < n_clusters:
+        return {"status": "skipped", "reason": "insufficient rows"}
+    scaler = StandardScaler() if StandardScaler else None
+    X_scaled = scaler.fit_transform(X) if scaler else X.to_numpy()
+    km = KMeans(n_clusters=n_clusters, random_state=42)
+    labels = km.fit_predict(X_scaled)
+    meta = {
+        "name": "kmeans_clusters",
+        "created_at": datetime.now(UTC).isoformat(),
+        "n_clusters": n_clusters,
+        "inertia": float(km.inertia_),
+        "centers": km.cluster_centers_.tolist(),
+        "feature_order": feature_cols,
+        "label_counts": {int(k): int(v) for k, v in zip(*np.unique(labels, return_counts=True))},
+    }
+    # Persist scaler parameters to allow consistent assignment at inference time
+    if scaler is not None:
+        try:
+            meta["scaler_mean"] = scaler.mean_.tolist()
+            meta["scaler_scale"] = scaler.scale_.tolist()
+        except Exception:
+            # In case attributes are missing
+            pass
+    with open(os.path.join(REGISTRY_DIR, "clusters.json"), "w") as f:
+        json.dump(meta, f)
+    np.save(os.path.join(REGISTRY_DIR, "cluster_labels.npy"), labels)
+    return {"status": "ok", "cluster_meta": meta}
+
 @flow
 def pipeline(ticker: str = "AAPL"):
     p = ingest(ticker)
     f = engineer(p)
     m = train(f)
     cls = train_classification(f)
-    return {"regression": m, "classification": cls}
+    pca = compute_pca(f)
+    clusters = cluster_features(f)
+    return {"regression": m, "classification": cls, "pca": pca, "clusters": clusters}
 
 if __name__ == "__main__":
     pipeline()

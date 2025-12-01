@@ -21,6 +21,8 @@ XGB_MODEL_PATH = os.path.join(MODEL_REGISTRY, "xgb_model.ubj")
 XGB_CLS_META_PATH = os.path.join(MODEL_REGISTRY, "xgb_classifier.json")
 XGB_CLS_MODEL_PATH = os.path.join(MODEL_REGISTRY, "xgb_classifier.ubj")
 TRAIN_SCRIPT = os.path.join(os.path.dirname(__file__), "..", "ml", "train_baseline.py")
+PCA_META_PATH = os.path.join(MODEL_REGISTRY, "pca.json")
+CLUSTERS_META_PATH = os.path.join(MODEL_REGISTRY, "clusters.json")
 
 BASE_DIR = os.path.dirname(__file__)
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
@@ -115,6 +117,12 @@ def model_info():
         with open(XGB_CLS_META_PATH, "r") as f:
             xgb_cls_meta = json.load(f)
         meta["xgb_classifier"] = xgb_cls_meta
+    if os.path.exists(PCA_META_PATH):
+        with open(PCA_META_PATH, "r") as f:
+            meta["pca"] = json.load(f)
+    if os.path.exists(CLUSTERS_META_PATH):
+        with open(CLUSTERS_META_PATH, "r") as f:
+            meta["clusters"] = json.load(f)
     return meta
 
 @app.get("/expected-features")
@@ -181,6 +189,137 @@ def classify_submit(request: Request, values: str = Form(...)):
     proba = float(booster.predict(dmatrix)[0])
     result = {"proba_up": proba, "label": int(proba >= 0.5)}
     return templates.TemplateResponse("classify.html", {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": result})
+
+@app.get("/pca-info")
+def pca_info():
+    if not os.path.exists(PCA_META_PATH):
+        raise HTTPException(status_code=404, detail="PCA metadata not found")
+    with open(PCA_META_PATH, "r") as f:
+        return json.load(f)
+
+@app.get("/cluster-info")
+def cluster_info():
+    if not os.path.exists(CLUSTERS_META_PATH):
+        raise HTTPException(status_code=404, detail="Cluster metadata not found")
+    with open(CLUSTERS_META_PATH, "r") as f:
+        meta = json.load(f)
+    # Optionally include most recent cluster label if labels file exists
+    labels_path = os.path.join(MODEL_REGISTRY, "cluster_labels.npy")
+    if os.path.exists(labels_path):
+        labels = np.load(labels_path)
+        meta["latest_label"] = int(labels[-1]) if len(labels) else None
+    return meta
+
+@app.post("/predict-cluster")
+def predict_cluster(req: PredictRequest):
+    # Load cluster metadata and assign cluster for provided feature row using nearest center.
+    if not os.path.exists(CLUSTERS_META_PATH):
+        raise HTTPException(status_code=404, detail="Cluster metadata not found")
+    with open(CLUSTERS_META_PATH, "r") as f:
+        meta = json.load(f)
+    centers = np.array(meta.get("centers", []), dtype=float)
+    feat_order = meta.get("feature_order", [])
+    if len(req.features) != len(feat_order):
+        raise HTTPException(status_code=400, detail=f"Expected {len(feat_order)} features, got {len(req.features)}")
+    x = np.array(req.features, dtype=float)
+    # If scaler params are available, standardize input to the same space as centers
+    mean = meta.get("scaler_mean")
+    scale = meta.get("scaler_scale")
+    if isinstance(mean, list) and isinstance(scale, list) and len(mean) == len(x) and len(scale) == len(x):
+        mean_arr = np.array(mean, dtype=float)
+        scale_arr = np.array(scale, dtype=float)
+        # Avoid division by zero
+        scale_arr[scale_arr == 0] = 1.0
+        x = (x - mean_arr) / scale_arr
+    dists = np.linalg.norm(centers - x, axis=1)
+    assigned = int(np.argmin(dists))
+    return {"cluster": assigned, "distances": dists.tolist()}
+
+@app.get("/pca", response_class=HTMLResponse)
+def pca_page(request: Request):
+    meta = None
+    error = None
+    if os.path.exists(PCA_META_PATH):
+        try:
+            with open(PCA_META_PATH, "r") as f:
+                meta = json.load(f)
+        except Exception as e:
+            error = f"Failed to load PCA metadata: {e}"
+    else:
+        error = "PCA metadata not found. Run the pipeline to generate it."
+    return templates.TemplateResponse(
+        "pca.html",
+        {
+            "request": request,
+            "title": "PCA",
+            "year": datetime.datetime.now().year,
+            "pca": meta,
+            "error": error,
+        },
+    )
+
+@app.get("/cluster", response_class=HTMLResponse)
+def cluster_page(request: Request):
+    meta = None
+    error = None
+    if os.path.exists(CLUSTERS_META_PATH):
+        try:
+            with open(CLUSTERS_META_PATH, "r") as f:
+                meta = json.load(f)
+        except Exception as e:
+            error = f"Failed to load cluster metadata: {e}"
+    else:
+        error = "Cluster metadata not found. Run the pipeline to generate it."
+    features = meta.get("feature_order", []) if isinstance(meta, dict) else []
+    return templates.TemplateResponse(
+        "cluster.html",
+        {
+            "request": request,
+            "title": "Clustering",
+            "year": datetime.datetime.now().year,
+            "clusters": meta,
+            "features": features,
+            "result": None,
+            "error": error,
+        },
+    )
+
+@app.post("/cluster", response_class=HTMLResponse)
+def cluster_submit(request: Request, values: str = Form(...)):
+    meta = None
+    error = None
+    if os.path.exists(CLUSTERS_META_PATH):
+        with open(CLUSTERS_META_PATH, "r") as f:
+            meta = json.load(f)
+    else:
+        error = "Cluster metadata not found. Run the pipeline to generate it."
+    features = meta.get("feature_order", []) if isinstance(meta, dict) else []
+    result = None
+    if not error and meta:
+        try:
+            nums = [float(x.strip()) for x in values.split(",") if x.strip() != ""]
+        except Exception:
+            nums = []
+        if len(nums) == len(features):
+            centers = np.array(meta.get("centers", []), dtype=float)
+            x = np.array(nums, dtype=float)
+            dists = np.linalg.norm(centers - x, axis=1)
+            assigned = int(np.argmin(dists))
+            result = {"cluster": assigned, "distances": dists.tolist()}
+        else:
+            error = f"Expected {len(features)} features, got {len(nums)}"
+    return templates.TemplateResponse(
+        "cluster.html",
+        {
+            "request": request,
+            "title": "Clustering",
+            "year": datetime.datetime.now().year,
+            "clusters": meta,
+            "features": features,
+            "result": result,
+            "error": error,
+        },
+    )
 
 @app.post("/predict")
 def predict(req: PredictRequest):

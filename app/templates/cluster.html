@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="section-header">
+  <h1>Clustering</h1>
+  <p class="muted">View cluster summary and assign a cluster for a new feature vector.</p>
+  {% if error %}
+    <p class="alert">{{ error }}</p>
+  {% endif %}
+</section>
+
+{% if clusters %}
+<div class="grid">
+  <div class="panel">
+    <h3>Summary</h3>
+    <p><strong>Clusters:</strong> {{ clusters.n_clusters }}</p>
+    <p><strong>Inertia:</strong> {{ '%.3f'|format(clusters.inertia) }}</p>
+    <p><strong>Created:</strong> {{ clusters.created_at }}</p>
+    {% if clusters.label_counts %}
+      <p><strong>Label Counts:</strong></p>
+      <code style="display:block;white-space:pre-wrap">{{ clusters.label_counts }}</code>
+    {% endif %}
+    <div class="form-actions" style="margin-top:8px">
+      <a class="btn btn-outline" href="/cluster-info" target="_blank">Open cluster JSON</a>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>Feature Order</h3>
+    {% if features %}
+      <p class="muted">Order expected for inputs ({{ features|length }} features total).</p>
+      <code style="display:block;white-space:pre-wrap">{{ features|join(', ') }}</code>
+    {% else %}
+      <p class="muted">No feature order available.</p>
+    {% endif %}
+  </div>
+</div>
+
+<form action="/cluster" method="post" class="form">
+  <div class="form-control">
+    <label for="values">Feature Values (comma-separated)</label>
+    <input id="values" type="text" name="values" placeholder="Provide {{ features|length }} values in the exact order" required />
+    <small class="hint">Order must match the feature list shown above; provide exactly {{ features|length }} values.</small>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">Assign Cluster</button>
+  </div>
+</form>
+
+{% if result %}
+<section class="panel" style="margin-top:16px">
+  <h3>Result</h3>
+  <p>Assigned Cluster: <strong>{{ result.cluster }}</strong></p>
+  {% if result.distances %}
+    <p>Distances to Centers:</p>
+    <code style="display:block;white-space:pre-wrap">{{ result.distances|map('float')|map('round', 4)|list|join(', ') }}</code>
+  {% endif %}
+  {% if error %}
+    <p class="alert">{{ error }}</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endif %}
+
+{% endblock %}

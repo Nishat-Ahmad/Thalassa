@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="section-header">
+  <h1>PCA Overview</h1>
+  <p class="muted">Explained variance and components from the latest PCA run.</p>
+  {% if error %}
+    <p class="alert">{{ error }}</p>
+  {% endif %}
+  {% if pca %}
+    <div class="grid">
+      <div class="panel">
+        <h3>Summary</h3>
+        <p><strong>Components:</strong> {{ pca.n_components }}</p>
+        <p><strong>Created:</strong> {{ pca.created_at }}</p>
+        <p><strong>Feature Count:</strong> {{ pca.feature_order|length }}</p>
+      </div>
+      <div class="panel">
+        <h3>Explained Variance Ratio</h3>
+        {% if pca.explained_variance_ratio %}
+          <code style="display:block;white-space:pre-wrap">{{ pca.explained_variance_ratio|map('float')|map('round', 4)|list|join(', ') }}</code>
+        {% else %}
+          <p class="muted">No variance data available.</p>
+        {% endif %}
+      </div>
+    </div>
+    <section class="panel" style="margin-top:16px">
+      <h3>Feature Order</h3>
+      <p class="muted">First 25 features shown.</p>
+      <code style="display:block;white-space:pre-wrap">{{ pca.feature_order[:25]|join(', ') }}</code>
+      <div class="form-actions" style="margin-top:8px">
+        <a class="btn btn-outline" href="/pca-info" target="_blank">Open PCA JSON</a>
+      </div>
+    </section>
+  {% endif %}
+</section>
+{% endblock %}

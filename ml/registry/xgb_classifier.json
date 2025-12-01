@@ -1,7 +1,7 @@
 {
   "task": "classification",
   "model": "xgb_classifier",
-  "created": "2025-12-01T12:22:07.904627+00:00",
+  "created": "2025-12-01T14:59:03.168715+00:00",
   "features": [
     "Close",
     "High",
@@ -30,8 +30,8 @@
     "lag_return_5"
   ],
   "metrics": {
-    "logloss": 0.004738042297855976,
+    "logloss": 0.005372368155773806,
     "auc": 1.0
   },
-  "samples": 483
+  "samples": 482
 }
