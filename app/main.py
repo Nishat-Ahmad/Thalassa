@@ -23,6 +23,11 @@ XGB_CLS_MODEL_PATH = os.path.join(MODEL_REGISTRY, "xgb_classifier.ubj")
 TRAIN_SCRIPT = os.path.join(os.path.dirname(__file__), "..", "ml", "train_baseline.py")
 PCA_META_PATH = os.path.join(MODEL_REGISTRY, "pca.json")
 CLUSTERS_META_PATH = os.path.join(MODEL_REGISTRY, "clusters.json")
+FORECAST_META_PATH = os.path.join(MODEL_REGISTRY, "forecast.json")
+try:
+    from statsmodels.tsa.arima.model import ARIMA
+except Exception:
+    ARIMA = None
 
 BASE_DIR = os.path.dirname(__file__)
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
@@ -209,6 +214,81 @@ def cluster_info():
         labels = np.load(labels_path)
         meta["latest_label"] = int(labels[-1]) if len(labels) else None
     return meta
+
+@app.get("/forecast")
+def forecast():
+    if not os.path.exists(FORECAST_META_PATH):
+        raise HTTPException(status_code=404, detail="Forecast not found. Run the pipeline to generate it.")
+    with open(FORECAST_META_PATH, "r") as f:
+        return json.load(f)
+
+@app.get("/forecast-page", response_class=HTMLResponse)
+def forecast_page(request: Request):
+    data = None
+    error = None
+    if os.path.exists(FORECAST_META_PATH):
+        try:
+            with open(FORECAST_META_PATH, "r") as f:
+                data = json.load(f)
+        except Exception as e:
+            error = f"Failed to load forecast: {e}"
+    else:
+        error = "No persisted forecast found. Run pipeline or submit a horizon to compute one." 
+    return templates.TemplateResponse(
+        "forecast.html",
+        {"request": request, "title": "Forecast", "year": datetime.datetime.now().year, "forecast": data, "error": error}
+    )
+
+@app.post("/forecast-page", response_class=HTMLResponse)
+def forecast_page_submit(request: Request, horizon: int = Form(7)):
+    error = None
+    result = None
+    # Attempt on-demand ARIMA using existing engineered AAPL features
+    if ARIMA is None:
+        error = "statsmodels not installed on server; cannot compute on-demand forecast." 
+    else:
+        feature_path = os.path.join(os.path.dirname(__file__), "..", "ml", "features", "AAPL.parquet")
+        if not os.path.exists(feature_path):
+            error = "Features file missing (AAPL.parquet). Run pipeline first." 
+        else:
+            try:
+                df = pd.read_parquet(feature_path).sort_values("date")
+                if "Close" not in df.columns:
+                    error = "Close column missing in features." 
+                else:
+                    series = df["Close"].astype(float)
+                    order = (1,1,1)
+                    model = ARIMA(series, order=order)
+                    fitted = model.fit()
+                    fc_vals = fitted.forecast(steps=horizon)
+                    conf_res = fitted.get_forecast(steps=horizon)
+                    conf = conf_res.conf_int().values.tolist()
+                    last_date = pd.to_datetime(df["date"].iloc[-1])
+                    idx = pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq="D")
+                    result = {
+                        "horizon": int(horizon),
+                        "order": list(order),
+                        "aic": float(getattr(fitted, 'aic', float('nan'))),
+                        "bic": float(getattr(fitted, 'bic', float('nan'))),
+                        "last_observation": float(series.iloc[-1]),
+                        "dates": [d.isoformat() for d in idx],
+                        "predictions": [float(x) for x in fc_vals.tolist()],
+                        "confidence_interval": conf,
+                    }
+            except Exception as e:
+                error = f"Forecast error: {e}" 
+    # Load persisted forecast again for context
+    persisted = None
+    if os.path.exists(FORECAST_META_PATH):
+        try:
+            with open(FORECAST_META_PATH, "r") as f:
+                persisted = json.load(f)
+        except Exception:
+            pass
+    return templates.TemplateResponse(
+        "forecast.html",
+        {"request": request, "title": "Forecast", "year": datetime.datetime.now().year, "forecast": persisted, "computed": result, "error": error}
+    )
 
 @app.post("/predict-cluster")
 def predict_cluster(req: PredictRequest):

@@ -9,3 +9,4 @@ deepchecks[ml]
 pytest
 python-multipart
 xgboost
+statsmodels

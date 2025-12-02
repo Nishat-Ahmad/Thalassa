@@ -16,6 +16,10 @@ try:
     import xgboost as xgb
 except Exception:
     xgb = None
+try:
+    from statsmodels.tsa.arima.model import ARIMA
+except Exception:
+    ARIMA = None
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "ml", "data")
 FEATURE_DIR = os.path.join(os.path.dirname(__file__), "..", "ml", "features")
@@ -208,7 +212,52 @@ def pipeline(ticker: str = "AAPL"):
     cls = train_classification(f)
     pca = compute_pca(f)
     clusters = cluster_features(f)
-    return {"regression": m, "classification": cls, "pca": pca, "clusters": clusters}
+    # Forecast task
+    fc = forecast_ts(f)
+    return {"regression": m, "classification": cls, "pca": pca, "clusters": clusters, "forecast": fc}
 
 if __name__ == "__main__":
     pipeline()
+
+@task
+def forecast_ts(feature_path: str, horizon: int = 7):
+    """Forecast Close prices using ARIMA; persist predictions and summary.
+
+    Args:
+        feature_path: Parquet path from engineer task.
+        horizon: Forecast horizon in days.
+    """
+    if ARIMA is None:
+        return {"status": "skipped", "reason": "statsmodels not available"}
+    df = pd.read_parquet(feature_path).sort_values("date")
+    if "Close" not in df.columns:
+        return {"status": "skipped", "reason": "Close column missing"}
+    series = df["Close"].astype(float)
+    # Simple differencing order based on series length; fallback to (1,1,1)
+    order = (1, 1, 1)
+    try:
+        model = ARIMA(series, order=order)
+        fitted = model.fit()
+        forecast = fitted.forecast(steps=horizon)
+        conf_res = fitted.get_forecast(steps=horizon)
+        conf = conf_res.conf_int()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    # Build dates for forecast horizon
+    last_date = pd.to_datetime(df["date"].iloc[-1])
+    idx = pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq="D")
+    out = {
+        "name": "arima-forecast",
+        "created_at": datetime.now(UTC).isoformat(),
+        "horizon": int(horizon),
+        "order": list(order),
+        "aic": float(getattr(fitted, 'aic', float('nan'))),
+        "bic": float(getattr(fitted, 'bic', float('nan'))),
+        "last_observation": float(series.iloc[-1]),
+        "predictions": [float(x) for x in forecast.tolist()],
+        "dates": [d.isoformat() for d in idx],
+        "confidence_interval": conf.values.tolist(),
+    }
+    with open(os.path.join(REGISTRY_DIR, "forecast.json"), "w") as f:
+        json.dump(out, f)
+    return {"status": "ok", "forecast": out}
