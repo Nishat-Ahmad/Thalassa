@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, UploadFile, File, HTTPException
 from fastapi import Form
+from fastapi import Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -222,6 +223,78 @@ def forecast():
     with open(FORECAST_META_PATH, "r") as f:
         return json.load(f)
 
+@app.get("/recommend")
+def recommend(date: str | None = Query(None), k: int = Query(5, gt=0, le=50), ticker: str = Query("AAPL")):
+    # Nearest neighbors in PCA space using persisted transformed matrix.
+    if not os.path.exists(PCA_META_PATH):
+        raise HTTPException(status_code=404, detail="PCA metadata not found")
+    pca_trans_path = os.path.join(MODEL_REGISTRY, "pca_transformed.npy")
+    if not os.path.exists(pca_trans_path):
+        raise HTTPException(status_code=404, detail="PCA transformed matrix not found. Run pipeline.")
+    with open(PCA_META_PATH, "r") as f:
+        meta = json.load(f)
+    comps = np.load(pca_trans_path)
+    row_index = meta.get("row_index", [])
+    if not row_index or len(row_index) != len(comps):
+        raise HTTPException(status_code=500, detail="Row index missing or misaligned in PCA metadata")
+    # Select target row
+    if date and date in row_index:
+        idx = row_index.index(date)
+    else:
+        idx = len(row_index) - 1
+        date = row_index[idx]
+    target = comps[idx]
+    # Compute distances to all rows
+    dists = np.linalg.norm(comps - target, axis=1)
+    # Exclude self
+    dists[idx] = np.inf
+    nn_idx = np.argsort(dists)[:k]
+    # Optionally attach Close values for context
+    feat_path = os.path.join(os.path.dirname(__file__), "..", "ml", "features", f"{ticker}.parquet")
+    closes = {}
+    if os.path.exists(feat_path):
+        fdf = pd.read_parquet(feat_path)
+        fdf["date"] = pd.to_datetime(fdf["date"]).dt.strftime("%Y-%m-%d")
+        closes = dict(zip(fdf["date"], fdf.get("Close", pd.Series([None]*len(fdf)))))
+    neighbors = [
+        {"date": row_index[i], "distance": float(dists[i]), "close": (None if closes == {} else float(closes.get(row_index[i])) if closes.get(row_index[i]) is not None else None)}
+        for i in nn_idx
+    ]
+    return {"target_date": date, "k": k, "neighbors": neighbors}
+
+@app.post("/recommend")
+def recommend_from_features(req: PredictRequest, k: int = Query(5, gt=0, le=50)):
+    # Project provided feature vector into PCA space and find nearest historical rows.
+    if not os.path.exists(PCA_META_PATH):
+        raise HTTPException(status_code=404, detail="PCA metadata not found")
+    pca_trans_path = os.path.join(MODEL_REGISTRY, "pca_transformed.npy")
+    if not os.path.exists(pca_trans_path):
+        raise HTTPException(status_code=404, detail="PCA transformed matrix not found. Run pipeline.")
+    with open(PCA_META_PATH, "r") as f:
+        meta = json.load(f)
+    feat_order = meta.get("feature_order", [])
+    mean = np.array(meta.get("mean", []), dtype=float)
+    components = np.array(meta.get("components", []), dtype=float)  # shape (n_components, n_features)
+    if not feat_order or len(req.features) != len(feat_order):
+        raise HTTPException(status_code=400, detail=f"Expected {len(feat_order)} features in PCA feature order")
+    if mean.size != len(feat_order) or components.shape[1] != len(feat_order):
+        raise HTTPException(status_code=500, detail="PCA metadata incomplete (mean/components)")
+    x = np.array(req.features, dtype=float)
+    x_centered = x - mean
+    # Coordinates in PCA space: (n_features) @ (n_features x n_components)^T => (n_components)
+    z = np.dot(x_centered, components.T)
+    comps = np.load(pca_trans_path)
+    row_index = meta.get("row_index", [])
+    if not row_index or len(row_index) != len(comps):
+        raise HTTPException(status_code=500, detail="Row index missing or misaligned in PCA metadata")
+    dists = np.linalg.norm(comps - z, axis=1)
+    nn_idx = np.argsort(dists)[:k]
+    neighbors = [
+        {"date": row_index[i], "distance": float(dists[i])}
+        for i in nn_idx
+    ]
+    return {"k": k, "neighbors": neighbors}
+
 @app.get("/forecast-page", response_class=HTMLResponse)
 def forecast_page(request: Request):
     data = None
@@ -288,6 +361,125 @@ def forecast_page_submit(request: Request, horizon: int = Form(7)):
     return templates.TemplateResponse(
         "forecast.html",
         {"request": request, "title": "Forecast", "year": datetime.datetime.now().year, "forecast": persisted, "computed": result, "error": error}
+    )
+
+@app.get("/recommend-page", response_class=HTMLResponse)
+def recommend_page(request: Request):
+    pca_meta = None
+    dates = []
+    features = []
+    error = None
+    if os.path.exists(PCA_META_PATH):
+        try:
+            with open(PCA_META_PATH, "r") as f:
+                pca_meta = json.load(f)
+            dates = pca_meta.get("row_index", [])[-30:]
+            features = pca_meta.get("feature_order", [])
+        except Exception as e:
+            error = f"Failed to load PCA metadata: {e}"
+    else:
+        error = "PCA artifacts not found. Run the pipeline to generate them."
+    return templates.TemplateResponse(
+        "recommend.html",
+        {
+            "request": request,
+            "title": "Recommend",
+            "year": datetime.datetime.now().year,
+            "dates": dates,
+            "features": features,
+            "neighbors": None,
+            "error": error,
+        },
+    )
+
+@app.post("/recommend-page", response_class=HTMLResponse)
+def recommend_page_submit(
+    request: Request,
+    mode: str = Form("date"),
+    date: str | None = Form(None),
+    k: int = Form(5),
+    values: str | None = Form(None),
+):
+    pca_meta = None
+    error = None
+    dates = []
+    features = []
+    neighbors = None
+    # Load PCA metadata and transformed matrix
+    if not os.path.exists(PCA_META_PATH):
+        error = "PCA metadata not found. Run pipeline first."
+    else:
+        with open(PCA_META_PATH, "r") as f:
+            pca_meta = json.load(f)
+        features = pca_meta.get("feature_order", [])
+        all_dates = pca_meta.get("row_index", [])
+        dates = all_dates[-30:]
+        trans_path = os.path.join(MODEL_REGISTRY, "pca_transformed.npy")
+        if not os.path.exists(trans_path):
+            error = "PCA transformed matrix missing. Run pipeline."
+    if error is None and pca_meta is not None:
+        comps = np.load(os.path.join(MODEL_REGISTRY, "pca_transformed.npy"))
+        row_index = pca_meta.get("row_index", [])
+        if mode == "vector" and values:
+            try:
+                nums = [float(x.strip()) for x in values.split(",") if x.strip() != ""]
+            except Exception:
+                nums = []
+            if len(nums) != len(features):
+                error = f"Expected {len(features)} features, got {len(nums)}"
+            else:
+                mean = np.array(pca_meta.get("mean", []), dtype=float)
+                components = np.array(pca_meta.get("components", []), dtype=float)
+                if mean.size != len(features) or components.shape[1] != len(features):
+                    error = "PCA metadata incomplete (mean/components)."
+                else:
+                    x = np.array(nums, dtype=float)
+                    z = np.dot(x - mean, components.T)
+                    dists = np.linalg.norm(comps - z, axis=1)
+                    nn_idx = np.argsort(dists)[:k]
+                    neighbors = [{"date": row_index[i], "distance": float(dists[i])} for i in nn_idx]
+        else:
+            # date mode
+            if not row_index:
+                error = "Row index missing in PCA metadata."
+            else:
+                if (not date) or (date not in row_index):
+                    idx = len(row_index) - 1
+                    date = row_index[idx]
+                else:
+                    idx = row_index.index(date)
+                target = comps[idx]
+                dists = np.linalg.norm(comps - target, axis=1)
+                dists[idx] = np.inf
+                nn_idx = np.argsort(dists)[:k]
+                # Optional Close values
+                feat_path = os.path.join(os.path.dirname(__file__), "..", "ml", "features", "AAPL.parquet")
+                closes = {}
+                if os.path.exists(feat_path):
+                    fdf = pd.read_parquet(feat_path)
+                    fdf["date"] = pd.to_datetime(fdf["date"]).dt.strftime("%Y-%m-%d")
+                    closes = dict(zip(fdf["date"], fdf.get("Close", pd.Series([None]*len(fdf)))))
+                neighbors = [
+                    {
+                        "date": row_index[i],
+                        "distance": float(dists[i]),
+                        "close": (None if closes == {} else float(closes.get(row_index[i])) if closes.get(row_index[i]) is not None else None),
+                    }
+                    for i in nn_idx
+                ]
+    return templates.TemplateResponse(
+        "recommend.html",
+        {
+            "request": request,
+            "title": "Recommend",
+            "year": datetime.datetime.now().year,
+            "dates": dates,
+            "features": features,
+            "neighbors": neighbors,
+            "error": error,
+            "selected_date": date,
+            "mode": mode,
+        },
     )
 
 @app.post("/predict-cluster")

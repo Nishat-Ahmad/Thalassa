@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="section-header">
+  <h1>Recommendations (PCA Nearest Neighbors)</h1>
+  <p class="muted">Find days most similar to a target date or a custom feature vector projected into PCA space.</p>
+  {% if error %}<p class="alert">{{ error }}</p>{% endif %}
+</section>
+
+<div class="grid">
+  <div class="panel">
+    <h3>By Date</h3>
+    <form action="/recommend-page" method="post" class="form">
+      <input type="hidden" name="mode" value="date" />
+      <div class="form-control">
+        <label for="date">Recent Dates</label>
+        <select id="date" name="date">
+          {% for d in dates %}
+          <option value="{{ d }}" {% if selected_date == d %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+        <small class="hint">List shows the last {{ dates|length }} dates; if empty, run the pipeline first.</small>
+      </div>
+      <div class="form-control">
+        <label for="k">Neighbors (k)</label>
+        <input id="k" type="number" name="k" value="5" min="1" max="50" required />
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Find Neighbors</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h3>By Feature Vector</h3>
+    <p class="muted">Paste comma-separated values matching the PCA feature order (shown below).</p>
+    <form action="/recommend-page" method="post" class="form">
+      <input type="hidden" name="mode" value="vector" />
+      <div class="form-control">
+        <label for="values">Feature Values</label>
+        <input id="values" type="text" name="values" placeholder="Provide {{ features|length }} values in the exact order" />
+        <small class="hint">Must be exactly {{ features|length }} values.</small>
+      </div>
+      <div class="form-control">
+        <label for="k2">Neighbors (k)</label>
+        <input id="k2" type="number" name="k" value="5" min="1" max="50" required />
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Find Neighbors</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<section class="panel" style="margin-top:16px">
+  <h3>PCA Feature Order</h3>
+  {% if features %}
+    <code style="display:block;white-space:pre-wrap">{{ features|join(', ') }}</code>
+  {% else %}
+    <p class="muted">Feature order not available. Run the pipeline.</p>
+  {% endif %}
+</section>
+
+{% if neighbors %}
+<section class="panel" style="margin-top:16px">
+  <h3>Neighbors</h3>
+  <p class="muted">Closest rows in PCA space.</p>
+  <ul>
+    {% for n in neighbors %}
+      <li>
+        <strong>{{ n.date }}</strong> — distance: {{ '%.5f'|format(n.distance) }}{% if n.close is defined and n.close is not none %}, close: {{ '%.2f'|format(n.close) }}{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+{% endblock %}

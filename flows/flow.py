@@ -155,13 +155,20 @@ def compute_pca(feature_path: str, n_components: int = 5):
         return {"status": "skipped", "reason": "no data"}
     pca = PCA(n_components=min(n_components, X.shape[1]))
     comps = pca.fit_transform(X)
+    # Capture row identifiers aligned to the transformed matrix
+    try:
+        dates = pd.to_datetime(df.loc[X.index, "date"]).dt.strftime("%Y-%m-%d").tolist()
+    except Exception:
+        dates = [str(i) for i in X.index.tolist()]
     meta = {
         "name": "pca_features",
         "created_at": datetime.now(UTC).isoformat(),
         "n_components": int(pca.n_components_),
         "explained_variance_ratio": pca.explained_variance_ratio_.tolist(),
         "components": pca.components_.tolist(),
+        "mean": pca.mean_.tolist(),
         "feature_order": feature_cols,
+        "row_index": dates,
     }
     with open(os.path.join(REGISTRY_DIR, "pca.json"), "w") as f:
         json.dump(meta, f)
