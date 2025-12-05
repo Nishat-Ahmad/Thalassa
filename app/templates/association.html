@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <h1>Association Rules</h1>
+  {% if error %}
+    <p class="error">{{ error }}</p>
+  {% endif %}
+  {% if assoc %}
+    <p>Ticker: <strong>{{ assoc.ticker }}</strong></p>
+    <p>Min Support: {{ assoc.min_support }}, Min Confidence: {{ assoc.min_confidence }}</p>
+    <p>Total Rules: {{ assoc.n_rules }}</p>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Antecedents</th>
+          <th>Consequents</th>
+          <th>Support</th>
+          <th>Confidence</th>
+          <th>Lift</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in assoc.rules %}
+        <tr>
+          <td>{{ ", ".join(r.antecedents) }}</td>
+          <td>{{ ", ".join(r.consequents) }}</td>
+          <td>{{ '%.3f'|format(r.support) }}</td>
+          <td>{{ '%.3f'|format(r.confidence) }}</td>
+          <td>{{ '%.3f'|format(r.lift) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No rules available.</p>
+  {% endif %}
+</section>
+{% endblock %}

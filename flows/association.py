@@ -1,0 +1,77 @@
+import os
+import json
+import numpy as np
+import pandas as pd
+from mlxtend.frequent_patterns import apriori, association_rules
+
+
+REGISTRY_DIR = os.path.join(os.path.dirname(__file__), "..", "ml", "registry")
+FEATURES_DIR = os.path.join(os.path.dirname(__file__), "..", "ml", "features")
+OUTPUT_PATH = os.path.join(REGISTRY_DIR, "association.json")
+
+
+def _build_itemset_frame(df: pd.DataFrame) -> pd.DataFrame:
+    # Basic binarized signals derived from available numeric columns
+    cols = df.columns
+    items = {}
+    if "Close" in cols:
+        ret = df["Close"].pct_change().fillna(0.0)
+        items["RET_UP"] = (ret > 0).astype(int)
+        items["RET_DOWN"] = (ret < 0).astype(int)
+        rolling = df["Close"].rolling(window=10, min_periods=5).mean()
+        items["PRICE_ABOVE_SMA10"] = (df["Close"] > rolling).astype(int)
+    if "Volume" in cols:
+        vol_thr = df["Volume"].quantile(0.8)
+        items["VOL_HIGH"] = (df["Volume"] >= vol_thr).astype(int)
+    # Any categorical columns already present (encode each category as item)
+    for c in cols:
+        if df[c].dtype == "object":
+            for val in df[c].dropna().unique()[:50]:
+                items[f"{c}={val}"] = (df[c] == val).astype(int)
+    item_df = pd.DataFrame(items, index=df.index)
+    # ensure at least one column
+    if item_df.empty:
+        item_df["RET_UP"] = 0
+    return item_df.clip(0, 1).astype(bool)
+
+
+def compute_association_rules(ticker: str = "AAPL", min_support: float = 0.1, min_confidence: float = 0.6, max_rules: int = 100):
+    feat_path = os.path.join(FEATURES_DIR, f"{ticker}.parquet")
+    if not os.path.exists(feat_path):
+        raise FileNotFoundError(f"Features file missing: {feat_path}")
+    df = pd.read_parquet(feat_path).sort_values("date")
+    item_df = _build_itemset_frame(df)
+    # Apriori frequent itemsets
+    freq = apriori(item_df, min_support=min_support, use_colnames=True)
+    if freq.empty:
+        result = {"ticker": ticker, "min_support": min_support, "min_confidence": min_confidence, "rules": []}
+    else:
+        rules = association_rules(freq, metric="confidence", min_threshold=min_confidence)
+        rules = rules.sort_values(["lift", "confidence", "support"], ascending=False)
+        # serialize top rules
+        serialized = []
+        for _, r in rules.head(max_rules).iterrows():
+            serialized.append({
+                "antecedents": sorted(list(r["antecedents"])),
+                "consequents": sorted(list(r["consequents"])),
+                "support": float(r["support"]),
+                "confidence": float(r.get("confidence", np.nan)),
+                "lift": float(r.get("lift", np.nan)),
+                "leverage": float(r.get("leverage", np.nan)),
+                "conviction": float(r.get("conviction", np.nan)),
+            })
+        result = {
+            "ticker": ticker,
+            "min_support": min_support,
+            "min_confidence": min_confidence,
+            "n_rules": len(serialized),
+            "rules": serialized,
+        }
+    os.makedirs(REGISTRY_DIR, exist_ok=True)
+    with open(OUTPUT_PATH, "w") as f:
+        json.dump(result, f, indent=2)
+    return result
+
+
+if __name__ == "__main__":
+    print(json.dumps(compute_association_rules(), indent=2))

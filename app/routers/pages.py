@@ -276,3 +276,21 @@ def recommend_page_submit(request: Request, mode: str = Form("date"), date: str 
                     closes = dict(zip(fdf["date"], fdf.get("Close", pd.Series([None]*len(fdf)))))
                 neighbors = [{"date": row_index[i], "distance": float(dists[i]), "close": (None if closes == {} else float(closes.get(row_index[i])) if closes.get(row_index[i]) is not None else None)} for i in nn_idx]
     return templates.TemplateResponse("recommend.html", {"request": request, "title": "Recommend", "year": datetime.datetime.now().year, "dates": dates, "features": features, "neighbors": neighbors, "error": error, "selected_date": date, "mode": mode})
+
+@router.get("/association-page", response_class=HTMLResponse)
+def association_page(request: Request):
+    path = os.path.join(MODEL_REGISTRY, "association.json")
+    data = None
+    error = None
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+        except Exception as e:
+            error = f"Failed to load association rules: {e}"
+    else:
+        error = "No association rules found. Run the association flow to generate them."
+    return templates.TemplateResponse(
+        "association.html",
+        {"request": request, "title": "Association", "year": datetime.datetime.now().year, "assoc": data, "error": error},
+    )

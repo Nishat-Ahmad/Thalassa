@@ -10,3 +10,4 @@ pytest
 python-multipart
 xgboost
 statsmodels
+mlxtend

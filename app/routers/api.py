@@ -232,3 +232,11 @@ def recommend_from_features(req: PredictRequest, k: int = Query(5, gt=0, le=50))
         for i in nn_idx
     ]
     return {"k": k, "neighbors": neighbors}
+
+@router.get("/association-info")
+def association_info():
+    path = os.path.join(MODEL_REGISTRY, "association.json")
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Association rules not found. Run association flow.")
+    with open(path, "r") as f:
+        return json.load(f)
