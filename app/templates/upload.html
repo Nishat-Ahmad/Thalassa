@@ -3,6 +3,7 @@
 <section class="section-header">
   <h1>Batch Prediction</h1>
   <p class="muted">Upload a CSV with the model's expected features to receive predictions.</p>
+  <div class="toolbar"><a class="btn" href="/tasks">← Back to ML Tasks</a></div>
 </section>
 
 <form action="/predict-batch" method="post" enctype="multipart/form-data" class="form">
@@ -13,7 +14,7 @@
   </div>
   <div class="form-actions">
     <button class="btn btn-primary" type="submit">Upload & Predict</button>
-    <a class="btn btn-outline" href="/">Cancel</a>
+    <a class="btn btn-outline" href="/tasks">Back to ML Tasks</a>
   </div>
 </form>
 

@@ -2,46 +2,48 @@
 {% block content %}
 <section class="section-header">
   <h1>ML Tasks</h1>
-  <p class="muted">Planned end-to-end tasks to showcase a real-world pipeline.</p>
-</section>
+  <p class="muted">Central hub for all machine learning features. Pick a task below.</p>
+  <div class="toolbar">
+    <a class="btn" href="/model-info" target="_blank">Model Info</a>
+    <a class="btn btn-outline" href="/docs" target="_blank">API Docs</a>
+  </div>
+  </section>
 
 <section class="cards">
   <article class="card">
-    <h3>Regression</h3>
-    <p>Predict next-day returns with tree-based models.</p>
-  </article>
-  <article class="card">
-    <h3>Classification</h3>
-    <p>Up/Down direction probabilities with calibrated outputs.</p>
-  </article>
-  <article class="card">
-    <h3>Time Series</h3>
-    <p>Multi-horizon forecasts with lagged and seasonal features.</p>
-  </article>
-  <article class="card">
-    <h3>Dimensionality Reduction</h3>
-    <p>PCA/autoencoders for factor extraction and denoising.</p>
+    <h3>Dimensionality Reduction (PCA)</h3>
+    <p>Explore explained variance, components, and feature order.</p>
+    <div class="form-actions"><a class="btn btn-primary" href="/pca">Open</a></div>
   </article>
   <article class="card">
     <h3>Clustering</h3>
-    <p>Market regime discovery via volatility/return profiles.</p>
+    <p>View cluster summary and assign cluster for new vectors.</p>
+    <div class="form-actions"><a class="btn btn-primary" href="/cluster">Open</a></div>
   </article>
   <article class="card">
-    <h3>Recommendation</h3>
-    <p>Peer ticker suggestions by factor and correlation similarity.</p>
+    <h3>Single Classification</h3>
+    <p>Enter features to get up/down probability from classifier.</p>
+    <div class="form-actions"><a class="btn btn-primary" href="/classify">Open</a></div>
+  </article>
+  <article class="card">
+    <h3>Batch Predict</h3>
+    <p>Upload CSV with expected features for bulk predictions.</p>
+    <div class="form-actions"><a class="btn btn-primary" href="/upload">Open</a></div>
+  </article>
+  <article class="card">
+    <h3>Forecast</h3>
+    <p>View persisted ARIMA forecast or compute on-demand.</p>
+    <div class="form-actions"><a class="btn btn-primary" href="/forecast-page">Open</a></div>
+  </article>
+  <article class="card">
+    <h3>Recommend</h3>
+    <p>Find nearest neighbors in PCA space by date or vector.</p>
+    <div class="form-actions"><a class="btn btn-primary" href="/recommend-page">Open</a></div>
   </article>
   <article class="card">
     <h3>Association</h3>
-    <p>Event co-movement patterns and frequent itemsets.</p>
+    <p>Frequent itemsets and association rules from engineered signals.</p>
+    <div class="form-actions"><a class="btn btn-primary" href="/association-page">Open</a></div>
   </article>
-</section>
-
-<section class="panel">
-  <p>Each task will expose datasets, training steps, and evaluation metrics with CI gates and Prefect orchestration.</p>
-  <div class="toolbar">
-    <a class="btn btn-primary" href="/upload">Try Batch Predict</a>
-    <a class="btn btn-outline" href="/roadmap">See Roadmap</a>
-  </div>
-  
 </section>
 {% endblock %}
