@@ -29,9 +29,7 @@ def data_page(request: Request):
 def tasks_page(request: Request):
     return templates.TemplateResponse("tasks.html", {"request": request, "title": "Tasks", "year": datetime.datetime.now().year})
 
-@router.get("/roadmap", response_class=HTMLResponse)
-def roadmap_page(request: Request):
-    return templates.TemplateResponse("roadmap.html", {"request": request, "title": "Roadmap", "year": datetime.datetime.now().year})
+# Roadmap page removed per request
 
 @router.get("/contact", response_class=HTMLResponse)
 def contact_page(request: Request):
