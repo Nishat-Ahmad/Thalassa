@@ -1,10 +1,10 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Request
 from pydantic import BaseModel
 import os, json, numpy as np, datetime
 import pandas as pd
 from ..core import (
     MODEL_PATH, XGB_META_PATH, XGB_CLS_META_PATH, PCA_META_PATH, CLUSTERS_META_PATH,
-    MODEL_REGISTRY, FORECAST_META_PATH
+    MODEL_REGISTRY, FORECAST_META_PATH, templates
 )
 from ..services.models import load_xgb, load_xgb_classifier, align_to_booster_features
 
@@ -14,36 +14,135 @@ except Exception:
     xgb = None
 
 router = APIRouter()
+APP_START = datetime.datetime.utcnow()
+
+
+def _uptime_seconds() -> float:
+    return float((datetime.datetime.utcnow() - APP_START).total_seconds())
+
+
+def _humanize(seconds: float) -> str:
+    mins, sec = divmod(int(seconds), 60)
+    hrs, mins = divmod(mins, 60)
+    days, hrs = divmod(hrs, 24)
+    parts = []
+    if days:
+        parts.append(f"{days}d")
+    if hrs:
+        parts.append(f"{hrs}h")
+    if mins:
+        parts.append(f"{mins}m")
+    parts.append(f"{sec}s")
+    return " ".join(parts)
+
+
+def _load_json(path: str):
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _collect_artifacts():
+    items = []
+
+    def add(name: str, path: str, extractor=None):
+        if os.path.exists(path):
+            detail = None
+            if extractor:
+                try:
+                    detail = extractor()
+                except Exception:
+                    detail = None
+            items.append({"name": name, "status": "ready", "detail": detail})
+        else:
+            items.append({"name": name, "status": "missing", "detail": None})
+
+    xgb_meta = _load_json(XGB_META_PATH)
+    xgb_cls_meta = _load_json(XGB_CLS_META_PATH)
+    pca_meta = _load_json(PCA_META_PATH)
+    cluster_meta = _load_json(CLUSTERS_META_PATH)
+    forecast_meta = _load_json(FORECAST_META_PATH)
+
+    add("XGB Regressor", MODEL_PATH, lambda: f"file size {round(os.path.getsize(MODEL_PATH)/1024,1)} KB")
+    add("XGB Regressor Meta", XGB_META_PATH, lambda: f"{len(xgb_meta.get('features', [])) if xgb_meta else 0} features")
+    add("Classifier Meta", XGB_CLS_META_PATH, lambda: f"{len(xgb_cls_meta.get('features', [])) if xgb_cls_meta else 0} features")
+    add("PCA Metadata", PCA_META_PATH, lambda: f"{len(pca_meta.get('feature_order', [])) if pca_meta else 0} feature dims")
+    add("Cluster Metadata", CLUSTERS_META_PATH, lambda: f"{len(cluster_meta.get('centers', [])) if cluster_meta else 0} centers")
+    add("Forecast", FORECAST_META_PATH, lambda: f"generated {forecast_meta.get('generated_at', 'unknown') if forecast_meta else 'unknown'}")
+
+    return items
 
 class PredictRequest(BaseModel):
     features: list
 
 @router.get("/health")
-def health():
-    return {"status": "ok", "service": "api", "time": datetime.datetime.utcnow().isoformat()}
+def health(request: Request):
+    payload = {
+        "status": "ok",
+        "service": "api",
+        "time": datetime.datetime.utcnow().isoformat() + "Z",
+        "uptime_seconds": round(_uptime_seconds(), 1),
+        "uptime_human": _humanize(_uptime_seconds()),
+    }
+
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        return templates.TemplateResponse(
+            "health.html",
+            {
+                "request": request,
+                "title": "Health",
+                "year": datetime.datetime.now().year,
+                **payload,
+            },
+        )
+    return payload
 
 @router.get("/model-info")
-def model_info():
-    meta = {"status": "no-model"}
+def model_info(request: Request):
+    xgb_meta = _load_json(XGB_META_PATH)
+    xgb_cls_meta = _load_json(XGB_CLS_META_PATH)
+    pca_meta = _load_json(PCA_META_PATH)
+    cluster_meta = _load_json(CLUSTERS_META_PATH)
+    forecast_meta = _load_json(FORECAST_META_PATH)
+    artifacts = _collect_artifacts()
+
+    legacy_meta: dict = {"status": "no-model"}
     if os.path.exists(MODEL_PATH):
-        with open(MODEL_PATH, "r") as f:
-            meta = json.load(f)
-    if os.path.exists(XGB_META_PATH):
-        with open(XGB_META_PATH, "r") as f:
-            meta["xgb"] = json.load(f)
-    if os.path.exists(XGB_CLS_META_PATH):
-        with open(XGB_CLS_META_PATH, "r") as f:
-            meta["xgb_classifier"] = json.load(f)
-    if os.path.exists(PCA_META_PATH):
-        with open(PCA_META_PATH, "r") as f:
-            meta["pca"] = json.load(f)
-    if os.path.exists(CLUSTERS_META_PATH):
-        with open(CLUSTERS_META_PATH, "r") as f:
-            meta["clusters"] = json.load(f)
-    if os.path.exists(FORECAST_META_PATH):
-        with open(FORECAST_META_PATH, "r") as f:
-            meta["forecast"] = json.load(f)
-    return meta
+        legacy_meta = _load_json(MODEL_PATH) or {"status": "unknown"}
+    if xgb_meta:
+        legacy_meta["xgb"] = xgb_meta
+    if xgb_cls_meta:
+        legacy_meta["xgb_classifier"] = xgb_cls_meta
+    if pca_meta:
+        legacy_meta["pca"] = pca_meta
+    if cluster_meta:
+        legacy_meta["clusters"] = cluster_meta
+    if forecast_meta:
+        legacy_meta["forecast"] = forecast_meta
+
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        return templates.TemplateResponse(
+            "model_info.html",
+            {
+                "request": request,
+                "title": "Model Info",
+                "year": datetime.datetime.now().year,
+                "xgb_meta": xgb_meta,
+                "xgb_cls_meta": xgb_cls_meta,
+                "pca_meta": pca_meta,
+                "cluster_meta": cluster_meta,
+                "forecast_meta": forecast_meta,
+                "artifacts": artifacts,
+            },
+        )
+
+    return legacy_meta
 
 @router.get("/expected-features")
 def expected_features():

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section-header">
+  <h1>System Health</h1>
+  <p class="muted">Live readiness for the API and model artifacts.</p>
+</section>
+
+<div class="cards">
+  <div class="card">
+    <h3>Status</h3>
+    <p class="hero-title" style="margin:4px 0 6px;">{{ status|upper }}</p>
+    <p class="muted">Service: {{ service }}</p>
+  </div>
+  <div class="card">
+    <h3>Server Time</h3>
+    <p class="hero-title" style="margin:4px 0 6px;">{{ time }}</p>
+    <p class="muted">UTC</p>
+  </div>
+  <div class="card">
+    <h3>Uptime</h3>
+    <p class="hero-title" style="margin:4px 0 6px;">{{ uptime_human }}</p>
+    <p class="muted">{{ uptime_seconds }} seconds</p>
+  </div>
+</div>
+
+
+<div class="panel">
+  <div class="section-header">
+    <h1>Model Details</h1>
+    <p class="muted">Key facts for loaded artifacts.</p>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Name</th><th>Type</th><th>Features</th></tr>
+      </thead>
+      <tbody>
+        {% for m in models %}
+        <tr>
+          <td>{{ m.name }}</td>
+          <td>{{ m.type or '-' }}</td>
+          <td>{{ m.features or '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

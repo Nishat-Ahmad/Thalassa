@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section-header">
+  <h1>Model & Artifact Info</h1>
+  <p class="muted">Snapshot of deployed models and derived artifacts.</p>
+</section>
+
+<div class="cards">
+  <div class="card">
+    <h3>XGB Regressor</h3>
+    {% if xgb_meta and xgb_meta.features %}
+      <p><strong>Features:</strong> {{ xgb_meta.features|length }}</p>
+      <p class="muted">Objective: {{ xgb_meta.objective or '-' }}</p>
+    {% else %}
+      <p class="muted">Not available.</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h3>XGB Classifier</h3>
+    {% if xgb_cls_meta and xgb_cls_meta.features %}
+      <p><strong>Features:</strong> {{ xgb_cls_meta.features|length }}</p>
+      <p class="muted">Classes: {{ xgb_cls_meta.num_classes or '-' }}</p>
+    {% else %}
+      <p class="muted">Not available.</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h3>PCA</h3>
+    {% if pca_meta and pca_meta.components and pca_meta.feature_order %}
+      <p><strong>Components:</strong> {{ pca_meta.components|length }}</p>
+      <p class="muted">Feature dims: {{ pca_meta.feature_order|length }}</p>
+    {% else %}
+      <p class="muted">Not available.</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h3>Clustering</h3>
+    {% if cluster_meta and cluster_meta.centers %}
+      <p><strong>Centers:</strong> {{ cluster_meta.centers|length }}</p>
+      <p class="muted">Features: {{ cluster_meta.feature_order|length if cluster_meta.feature_order else '-' }}</p>
+    {% else %}
+      <p class="muted">Not available.</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h3>Forecast</h3>
+    {% if forecast_meta and forecast_meta.predictions %}
+      <p><strong>Horizon:</strong> {{ forecast_meta.predictions|length }}</p>
+      <p class="muted">Generated: {{ forecast_meta.generated_at or '-' }}</p>
+    {% else %}
+      <p class="muted">Not available.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel">
+  <div class="section-header">
+    <h1>Artifact Status</h1>
+    <p class="muted">Presence and quick details for each artifact.</p>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Name</th><th>Status</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        {% for item in artifacts %}
+        <tr>
+          <td>{{ item.name }}</td>
+          <td>
+            <span class="badge" style="background: {% if item.status == 'ready' %}rgba(17,219,201,0.15){% else %}rgba(170,85,85,0.15){% endif %}; border-color: {% if item.status == 'ready' %}var(--primary){% else %}#aa5555{% endif %}; color: var(--text);">
+              {{ item.status }}
+            </span>
+          </td>
+          <td>{{ item.detail or '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="section-header">
+    <h1>Feature Lists</h1>
+    <p class="muted">Key columns expected by each model.</p>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Model</th><th>Features</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>XGB Regressor</td>
+          <td>{% if xgb_meta and xgb_meta.features %}{{ xgb_meta.features|join(', ') }}{% else %}-{% endif %}</td>
+        </tr>
+        <tr>
+          <td>XGB Classifier</td>
+          <td>{% if xgb_cls_meta and xgb_cls_meta.features %}{{ xgb_cls_meta.features|join(', ') }}{% else %}-{% endif %}</td>
+        </tr>
+        <tr>
+          <td>PCA</td>
+          <td>{% if pca_meta and pca_meta.feature_order %}{{ pca_meta.feature_order|join(', ') }}{% else %}-{% endif %}</td>
+        </tr>
+        <tr>
+          <td>Clusters</td>
+          <td>{% if cluster_meta and cluster_meta.feature_order %}{{ cluster_meta.feature_order|join(', ') }}{% else %}-{% endif %}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

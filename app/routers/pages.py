@@ -33,7 +33,7 @@ def tasks_page(request: Request):
 
 @router.get("/contact", response_class=HTMLResponse)
 def contact_page(request: Request):
-    return templates.TemplateResponse("contact.html", {"request": request, "title": "Contact", "year": datetime.datetime.now().year})
+    return templates.TemplateResponse("contact.html", {"request": request, "title": "Support", "year": datetime.datetime.now().year})
 
 @router.get("/upload", response_class=HTMLResponse)
 def upload_page(request: Request):
