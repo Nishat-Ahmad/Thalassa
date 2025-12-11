@@ -1,0 +1,100 @@
+# --- Python Basics ---
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Virtual Environments ---
+# Common names for virtual envs
+venv/
+env/
+.env
+.venv/
+env.bak/
+venv.bak/
+
+# --- IDE & OS Specifics ---
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# --- Jupyter Notebooks ---
+.ipynb_checkpoints
+*-checkpoint.ipynb
+# Optional: Ignore all output cells (requires external tools usually, but good to know)
+
+# --- Machine Learning Data ---
+# It is best practice to keep data local and not in git
+data/
+datasets/
+raw_data/
+processed_data/
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.jsonl
+
+# --- Model Artifacts ---
+# Large model weights should usually not be in standard git
+*.pkl
+*.pickle
+*.joblib
+*.pt
+*.pth
+*.onnx
+models/
+saved_models/
+model_checkpoints/
+
+# --- Deep Learning Frameworks ---
+
+# TensorFlow / Keras
+*.tf
+*.tflite
+saved_model/
+
+# PyTorch
+*.mo
+
+# --- Logging & Experiment Tracking ---
+logs/
+runs/
+results/
+# TensorBoard
+*.tfevents*
+# Weights & Biases
+wandb/
+# MLflow
+mlruns/
+.trash/
+
+# --- Documentation ---
+site/
+
+# --- Environment Variables ---
+# CRITICAL: Never commit API keys or secrets
+.env
+.env.local
