@@ -1,0 +1,211 @@
+{
+  "ticker": "BAC",
+  "min_support": 0.1,
+  "min_confidence": 0.6,
+  "n_rules": 15,
+  "rules": [
+    {
+      "antecedents": [
+        "RET_UP"
+      ],
+      "consequents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "support": 0.4194214876033058,
+      "confidence": 0.7807692307692308,
+      "lift": 1.226923076923077,
+      "leverage": 0.07757325319308789,
+      "conviction": 1.6586921850079746
+    },
+    {
+      "antecedents": [
+        "RET_UP",
+        "ticker=BAC"
+      ],
+      "consequents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "support": 0.4194214876033058,
+      "confidence": 0.7807692307692308,
+      "lift": 1.226923076923077,
+      "leverage": 0.07757325319308789,
+      "conviction": 1.6586921850079746
+    },
+    {
+      "antecedents": [
+        "RET_UP"
+      ],
+      "consequents": [
+        "PRICE_ABOVE_SMA10",
+        "ticker=BAC"
+      ],
+      "support": 0.4194214876033058,
+      "confidence": 0.7807692307692308,
+      "lift": 1.226923076923077,
+      "leverage": 0.07757325319308789,
+      "conviction": 1.6586921850079746
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "consequents": [
+        "RET_UP"
+      ],
+      "support": 0.4194214876033058,
+      "confidence": 0.6590909090909091,
+      "lift": 1.226923076923077,
+      "leverage": 0.07757325319308789,
+      "conviction": 1.3575757575757574
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10",
+        "ticker=BAC"
+      ],
+      "consequents": [
+        "RET_UP"
+      ],
+      "support": 0.4194214876033058,
+      "confidence": 0.6590909090909091,
+      "lift": 1.226923076923077,
+      "leverage": 0.07757325319308789,
+      "conviction": 1.3575757575757574
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "consequents": [
+        "RET_UP",
+        "ticker=BAC"
+      ],
+      "support": 0.4194214876033058,
+      "confidence": 0.6590909090909091,
+      "lift": 1.226923076923077,
+      "leverage": 0.07757325319308789,
+      "conviction": 1.3575757575757574
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "consequents": [
+        "ticker=BAC"
+      ],
+      "support": 0.6363636363636364,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "RET_UP"
+      ],
+      "consequents": [
+        "ticker=BAC"
+      ],
+      "support": 0.5371900826446281,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "RET_DOWN"
+      ],
+      "consequents": [
+        "ticker=BAC"
+      ],
+      "support": 0.45041322314049587,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10",
+        "RET_UP"
+      ],
+      "consequents": [
+        "ticker=BAC"
+      ],
+      "support": 0.4194214876033058,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10",
+        "RET_DOWN"
+      ],
+      "consequents": [
+        "ticker=BAC"
+      ],
+      "support": 0.21074380165289255,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "VOL_HIGH"
+      ],
+      "consequents": [
+        "ticker=BAC"
+      ],
+      "support": 0.20041322314049587,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10",
+        "VOL_HIGH"
+      ],
+      "consequents": [
+        "ticker=BAC"
+      ],
+      "support": 0.1115702479338843,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "RET_DOWN",
+        "VOL_HIGH"
+      ],
+      "consequents": [
+        "ticker=BAC"
+      ],
+      "support": 0.10950413223140495,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "ticker=BAC"
+      ],
+      "consequents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "support": 0.6363636363636364,
+      "confidence": 0.6363636363636364,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": 1.0
+    }
+  ]
+}

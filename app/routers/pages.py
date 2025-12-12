@@ -50,6 +50,9 @@ def search_page(request: Request, ticker: str | None = None, period: str | None 
         "3mo": "3mo",
         "6mo": "6mo",
         "1y": "1y",
+        "2y": "2y",
+        "5y": "5y",
+        "max": "max",
     }
     chosen_period = period if period in period_map else "1mo"
     if ticker:
@@ -80,6 +83,67 @@ def search_page(request: Request, ticker: str | None = None, period: str | None 
                 "year_high": r3(getattr(info, "year_high", None) if info else details.get("fiftyTwoWeekHigh")),
                 "year_low": r3(getattr(info, "year_low", None) if info else details.get("fiftyTwoWeekLow")),
             }
+
+            # Additional financial summary fields (may be absent depending on ticker/data source)
+            try:
+                market_cap = details.get("marketCap") if details else None
+            except Exception:
+                market_cap = None
+            try:
+                pe = details.get("trailingPE") or details.get("trailingPegRatio") or details.get("peRatio")
+            except Exception:
+                pe = None
+            try:
+                div_yield = details.get("dividendYield")
+            except Exception:
+                div_yield = None
+            try:
+                beta = details.get("beta")
+            except Exception:
+                beta = None
+
+            ticker_info.update({
+                "market_cap": market_cap,
+                "pe_ratio": r3(pe) if pe is not None else None,
+                # dividendYield from yfinance is often 0.006 -> show as percent in template if desired
+                "dividend_yield": (round(float(div_yield) * 100, 3) if div_yield is not None else None) if div_yield is not None else None,
+                "beta": r3(beta) if beta is not None else None,
+            })
+
+            # Company metadata for display
+            try:
+                sector = details.get("sector") if details else None
+            except Exception:
+                sector = None
+            try:
+                industry = details.get("industry") if details else None
+            except Exception:
+                industry = None
+            try:
+                country = details.get("country") if details else None
+            except Exception:
+                country = None
+            try:
+                website = details.get("website") if details else None
+            except Exception:
+                website = None
+            try:
+                summary = details.get("longBusinessSummary") or details.get("summary") if details else None
+            except Exception:
+                summary = None
+            try:
+                employees = details.get("fullTimeEmployees") if details else None
+            except Exception:
+                employees = None
+
+            ticker_info.update({
+                "sector": sector,
+                "industry": industry,
+                "country": country,
+                "website": website,
+                "summary": summary,
+                "employees": employees,
+            })
             df = tk.history(period=period_map[chosen_period])
             if not df.empty:
                 df = df.reset_index()
