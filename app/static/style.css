@@ -56,18 +56,15 @@ body > .footer { flex: 0 0 auto; margin-top: auto; }
 .content { flex: 1 0 auto; width: 100%; padding: 28px 0 80px; }
 
 .footer {
-position: fixed;
-left: 0;
-bottom: 0;
-width: 100%;
-background: var(--bg-elev);
-color: var(--muted);
-text-align: center;
-border-top: 1px solid var(--border);
-padding: 20px 0;
-font-size: 0.9rem;
-z-index: 100;
-max-height: fit-content;
+  position: relative;
+  width: 100%;
+  background: var(--bg-elev);
+  color: var(--muted);
+  text-align: center;
+  border-top: 1px solid var(--border);
+  padding: 18px 0;
+  font-size: 0.9rem;
+  z-index: 20;
 }
 .footer .container { display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; }
 .footer .sep { opacity: 0.5; }
@@ -75,10 +72,23 @@ max-height: fit-content;
 .link-muted:hover { color: #cbd5e1; }
 
 /* Hero */
-.hero { border: 1px solid var(--border); border-radius: 16px; padding: 46px 28px; background: linear-gradient(135deg, rgba(17,219,201,0.18), rgba(133,222,182,0.12)); box-shadow: var(--shadow); }
-.hero-title { margin: 0 0 8px; font-size: 2rem; line-height: 1.1; }
-.hero-subtitle { margin: 0 0 18px; color: var(--muted); }
+.hero {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 42px 28px;
+  background: linear-gradient(135deg, rgba(17,219,201,0.12), rgba(133,222,182,0.06));
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+  align-items: center;
+}
+.hero .hero-content { max-width: 780px; }
+.hero-title { margin: 0 0 8px; font-size: 2.2rem; line-height: 1.05; }
+.hero-subtitle { margin: 0 0 18px; color: var(--muted); font-size: 1.05rem; }
 .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.hero .illustration { display:flex; align-items:center; justify-content:center; }
+.hero .illustration .panel { width:100%; height: 220px; display:flex; align-items:center; justify-content:center; border-radius:12px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00)); border:1px solid rgba(255,255,255,0.03); }
 
 /* Tasks page */
 .tasks-hero { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; align-items: stretch; }
@@ -240,9 +250,11 @@ max-height: fit-content;
 .roadmap-list li { margin: 8px 0; }
 
 @media (max-width: 600px) {
-.hero { padding: 36px 22px; }
-.hero-title { font-size: 1.6rem; }
+  .hero { padding: 28px 18px; grid-template-columns: 1fr; }
+  .hero-title { font-size: 1.6rem; }
 }
+
+/* light theme removed for now */
 
 .inline-form {
   display: flex;

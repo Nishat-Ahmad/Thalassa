@@ -5,16 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{ title or 'Thalassa · Finance ML Platform' }}</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <meta name="theme-color" content="#0e2d2c" />
   <meta name="color-scheme" content="light dark" />
 </head>
 <body>
   <header class="site-header">
     <nav class="nav container">
-      <a href="http://127.0.0.1:8000/" class="brand">Thalassa</a>
+      <a href="/" class="brand">Thalassa</a>
       <input id="nav-toggle" type="checkbox" class="nav-toggle" aria-label="Toggle navigation" />
       <label for="nav-toggle" class="nav-toggle-label" aria-hidden="true">☰</label>
       <ul class="links">
-        <li><a href="http://127.0.0.1:8000/">Home</a></li>
+        <li><a href="/">Home</a></li>
         <li><a href="/search">Search</a></li>
         <li><a href="/tasks">ML Tasks</a></li>
         <li><a href="/contact">Support</a></li>
@@ -33,6 +34,17 @@
       <a class="link-muted" href="/docs">API Docs</a>
     </div>
   </footer>
-  
+  <script>
+    // close mobile nav when clicking links
+    document.addEventListener('click', function (e) {
+      const a = e.target.closest && e.target.closest('.links a');
+      if (a) {
+        const t = document.getElementById('nav-toggle');
+        if (t) t.checked = false;
+      }
+    });
+
+    // (no theme toggle) mobile nav close retained
+  </script>
 </body>
 </html>
