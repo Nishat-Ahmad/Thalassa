@@ -1,58 +1,102 @@
 {% extends 'base.html' %}
 {% block content %}
-<section class="section-header">
-  <h1>ML Tasks</h1>
-  <p class="muted">Central hub for all machine learning features. Pick a task below.</p>
-  {% if ran %}
-    <div class="panel" style="border-left:4px solid var(--accent);">
-      <p class="muted">Pipeline completed for <strong>{{ ticker or 'AAPL' }}</strong>. Artifacts saved under ml/registry/{{ ticker or 'AAPL' }}/{{ ts or '...' }}.</p>
+<section class="section-header tasks-hero">
+  <div class="hero-left">
+    <h1 class="page-title">ML TaskGrid</h1>
+    <div class="hero-actions">
+      <form method="post" action="/run-pipeline" class="inline-form">
+        <label class="input-label" for="ticker-input">Ticker</label>
+        <div class="input-row">
+          <input id="ticker-input" name="ticker" value="{{ ticker or 'AAPL' }}" placeholder="AAPL" />
+          <button class="btn btn-primary" type="submit">Run Pipeline</button>
+        </div>
+      </form>
     </div>
-  {% endif %}
-  <div class="toolbar" style="gap:8px;flex-wrap:wrap;">
-    <a class="btn" href="/model-info{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Model Info</a>
-    <form method="post" action="/run-pipeline" style="display:flex;gap:8px;align-items:center;">
-      <input type="hidden" name="ticker" value="{{ ticker or 'AAPL' }}">
-      <button class="btn btn-primary" type="submit">Run Pipeline for {{ ticker or 'AAPL' }}</button>
-    </form>
-    <span class="muted">Ticker: <strong>{{ ticker or 'AAPL' }}</strong></span>
   </div>
-  </section>
+  <div class="hero-right">
+    <div class="stat-card">
+      <div class="stat-header">
+        <span class="stat-title">Current Ticker</span>
+        <span class="stat-pill live">Live</span>
+      </div>
+      <div class="stat-value">{{ ticker or 'AAPL' }}</div>
+    </div>
+    {% if ran %}
+    <div class="stat-card success">
+      <div class="stat-header">
+        <span class="stat-title">Last Pipeline</span>
+        <span class="stat-pill success">Complete</span>
+      </div>
+      <div class="stat-details">Saved to <code>ml/registry/{{ ticker or 'AAPL' }}/{{ ts or '...' }}</code></div>
+    </div>
+    {% else %}
+    <div class="stat-card muted-card">
+      <div class="stat-header">
+        <span class="stat-title">Last Pipeline</span>
+        <span class="stat-pill queued">Queued</span>
+      </div>
+      <div class="stat-details">Run to refresh artifacts</div>
+    </div>
+    {% endif %}
+  </div>
+</section>
 
-<section class="cards">
-  <article class="card">
-    <h3>Dimensionality Reduction (PCA)</h3>
-    <p>Explore explained variance, components, and feature order.</p>
-    <div class="form-actions"><a class="btn btn-primary" href="/pca{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
-  </article>
-  <article class="card">
-    <h3>Clustering</h3>
-    <p>View cluster summary and assign cluster for new vectors.</p>
-    <div class="form-actions"><a class="btn btn-primary" href="/cluster{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
-  </article>
-  <article class="card">
-    <h3>Single Classification</h3>
-    <p>Enter features to get up/down probability from classifier.</p>
+<section class="tasks-grid">
+  <article class="card task-card">
+    <div class="card-head">
+      <span class="pill">Signals</span>
+      <h3>Single Classification</h3>
+    </div>
+    <p>Classifies whether the stock price will go up or down the next day. Employs XGBoost classification with features derived from historical stock data.</p>
     <div class="form-actions"><a class="btn btn-primary" href="/classify{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
   </article>
-  <article class="card">
-    <h3>Batch Predict</h3>
-    <p>Upload CSV with expected features for bulk predictions.</p>
+  <article class="card task-card">
+    <div class="card-head">
+      <span class="pill">Data</span>
+      <h3>Batch Predict</h3>
+    </div>
+    <p>Upload a CSV with feature columns to generate bulk predictions in one pass.</p>
     <div class="form-actions"><a class="btn btn-primary" href="/upload">Open</a></div>
   </article>
-  <article class="card">
-    <h3>Forecast</h3>
-    <p>View persisted ARIMA forecast or compute on-demand.</p>
+  <article class="card task-card">
+    <div class="card-head">
+      <span class="pill">Time Series</span>
+      <h3>Forecast</h3>
+    </div>
+    <p>Predicts future stock prices using ARIMA (AutoRegressive Integrated Moving Average) models. Provides forecasts along with confidence intervals for the specified horizon.</p>
     <div class="form-actions"><a class="btn btn-primary" href="/forecast-page{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
   </article>
-  <article class="card">
-    <h3>Recommend</h3>
-    <p>Find nearest neighbors in PCA space by date or vector.</p>
+  <article class="card task-card">
+    <div class="card-head">
+      <span class="pill">Neighbors</span>
+      <h3>Recommend</h3>
+    </div>
+    <p>Find nearest neighbors in PCA space by reference date or custom vector.</p>
     <div class="form-actions"><a class="btn btn-primary" href="/recommend-page{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
   </article>
-  <article class="card">
-    <h3>Association</h3>
-    <p>Frequent itemsets and association rules from engineered signals.</p>
+  <article class="card task-card">
+    <div class="card-head">
+      <span class="pill">Patterns</span>
+      <h3>Association</h3>
+    </div>
+    <p>Identifies frequent patterns and associations in stock data, such as price movements and volume trends. Uses the Apriori algorithm to generate rules based on support and confidence thresholds.</p>
     <div class="form-actions"><a class="btn btn-primary" href="/association-page{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
+  </article>
+  <article class="card task-card">
+    <div class="card-head">
+      <span class="pill">Insight</span>
+      <h3>Dimensionality Reduction</h3>
+    </div>
+    <p>Reduces the dimensionality of stock features while retaining the most significant information. Outputs transformed features and explained variance ratios for analysis.</p>
+    <div class="form-actions"><a class="btn btn-primary" href="/pca{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
+  </article>
+  <article class="card task-card">
+    <div class="card-head">
+      <span class="pill">Segments</span>
+      <h3>Clustering</h3>
+    </div>
+    <p>Groups stocks into clusters based on similar feature patterns. Applies KMeans clustering to identify distinct market behaviors or stock groupings.</p>
+    <div class="form-actions"><a class="btn btn-primary" href="/cluster{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
   </article>
 </section>
 {% endblock %}
