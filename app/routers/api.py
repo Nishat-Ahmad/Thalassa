@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Request, Form
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 import os, json, numpy as np, datetime
 import sys
@@ -59,16 +60,25 @@ def _humanize(seconds: float) -> str:
 
 @router.post("/run-pipeline")
 def run_pipeline(
+    request: Request,
     ticker_query: str | None = Query(None, alias="ticker"),
     ticker_form: str | None = Form(None, alias="ticker"),
 ):
     t = _safe_ticker(ticker_form or ticker_query)
     try:
         pipeline = _load_pipeline()
-        result = pipeline(t)
+        ts = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        result = pipeline(t, run_dir=None)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pipeline failed for {t}: {e}")
-    return {"status": "ok", "ticker": t, "result_keys": list(result.keys()) if result else []}
+
+    payload = {"status": "ok", "ticker": t, "result_keys": list(result.keys()) if result else [], "ts": ts}
+
+    accept = request.headers.get("accept", "")
+    content_type = request.headers.get("content-type", "")
+    if "text/html" in accept or content_type.startswith("application/x-www-form-urlencoded"):
+        return RedirectResponse(url=f"/tasks?ticker={t}&ran=1&ts={ts}", status_code=303)
+    return payload
 
 
 def _load_json(path: str):

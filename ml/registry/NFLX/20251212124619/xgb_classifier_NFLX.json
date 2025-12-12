@@ -1,7 +1,7 @@
 {
   "task": "classification",
   "model": "xgb_classifier",
-  "created": "2025-12-12T12:13:58.526889+00:00",
+  "created": "2025-12-12T12:46:28.553804+00:00",
   "features": [
     "Close",
     "High",
@@ -30,9 +30,9 @@
     "lag_return_5"
   ],
   "metrics": {
-    "logloss": 0.004910448053176852,
+    "logloss": 0.00473221316528709,
     "auc": 1.0
   },
   "samples": 483,
-  "ticker": "AAPL"
+  "ticker": "NFLX"
 }

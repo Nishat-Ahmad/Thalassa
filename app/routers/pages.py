@@ -108,11 +108,18 @@ def search_page(request: Request, ticker: str | None = None, period: str | None 
     )
 
 @router.get("/tasks", response_class=HTMLResponse)
-def tasks_page(request: Request, ticker: str | None = None):
+def tasks_page(request: Request, ticker: str | None = None, ran: int | None = None, ts: str | None = None):
     t = _safe_ticker(ticker)
     return templates.TemplateResponse(
         "tasks.html",
-        {"request": request, "title": "Tasks", "year": datetime.datetime.now().year, "ticker": t},
+        {
+            "request": request,
+            "title": "Tasks",
+            "year": datetime.datetime.now().year,
+            "ticker": t,
+            "ran": bool(ran),
+            "ts": ts,
+        },
     )
 
 # Roadmap page removed per request

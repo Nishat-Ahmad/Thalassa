@@ -3,6 +3,11 @@
 <section class="section-header">
   <h1>ML Tasks</h1>
   <p class="muted">Central hub for all machine learning features. Pick a task below.</p>
+  {% if ran %}
+    <div class="panel" style="border-left:4px solid var(--accent);">
+      <p class="muted">Pipeline completed for <strong>{{ ticker or 'AAPL' }}</strong>. Artifacts saved under ml/registry/{{ ticker or 'AAPL' }}/{{ ts or '...' }}.</p>
+    </div>
+  {% endif %}
   <div class="toolbar" style="gap:8px;flex-wrap:wrap;">
     <a class="btn" href="/model-info{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Model Info</a>
     <form method="post" action="/run-pipeline" style="display:flex;gap:8px;align-items:center;">
