@@ -74,7 +74,7 @@ def engineer(data_path: str):
     return fpath
 
 @task
-def train_regressor(feature_path: str):
+def train_regressor(feature_path: str, run_dir: str | None = None):
     df = pd.read_parquet(feature_path)
     y = df["return"].shift(-1)
     feature_cols = [c for c in df.columns if c not in ["date", "ticker", "return"] and pd.api.types.is_numeric_dtype(df[c])]
@@ -101,8 +101,10 @@ def train_regressor(feature_path: str):
     mae = float(np.abs(y_test - pred).mean())
     booster = model.get_booster()
     ticker = _ticker_from_path(feature_path)
-    model_path = os.path.join(REGISTRY_DIR, f"xgb_model_{ticker}.ubj")
-    meta_path = os.path.join(REGISTRY_DIR, f"xgb_model_{ticker}.json")
+    target_dir = run_dir or os.path.join(REGISTRY_DIR, ticker)
+    os.makedirs(target_dir, exist_ok=True)
+    model_path = os.path.join(target_dir, f"xgb_model_{ticker}.ubj")
+    meta_path = os.path.join(target_dir, f"xgb_model_{ticker}.json")
     booster.save_model(model_path)
     meta = {
         "name": "xgb-regressor",
@@ -117,10 +119,13 @@ def train_regressor(feature_path: str):
     return meta_path
 
 @task
-def train_classification(feature_path: str):
+def train_classification(feature_path: str, run_dir: str | None = None):
     ticker = _ticker_from_path(feature_path)
     script = os.path.join(os.path.dirname(__file__), "..", "ml", "train_classification.py")
-    process = Popen(["python", script, "--ticker", ticker], stdout=PIPE, stderr=PIPE)
+    cmd = ["python", script, "--ticker", ticker]
+    if run_dir:
+        cmd.extend(["--run-dir", run_dir])
+    process = Popen(cmd, stdout=PIPE, stderr=PIPE)
     stdout, stderr = process.communicate()
     if process.returncode != 0:
         raise RuntimeError(f"Classification training failed: {stderr.decode()}")
@@ -131,7 +136,7 @@ def train_classification(feature_path: str):
     return result
 
 @task
-def compute_pca(feature_path: str, n_components: int = 5):
+def compute_pca(feature_path: str, n_components: int = 5, run_dir: str | None = None):
     if PCA is None:
         return {"status": "skipped", "reason": "sklearn not available"}
     df = pd.read_parquet(feature_path)
@@ -146,6 +151,8 @@ def compute_pca(feature_path: str, n_components: int = 5):
     except Exception:
         dates = [str(i) for i in X.index.tolist()]
     ticker = _ticker_from_path(feature_path)
+    target_dir = run_dir or os.path.join(REGISTRY_DIR, ticker)
+    os.makedirs(target_dir, exist_ok=True)
     meta = {
         "name": "pca_features",
         "created_at": datetime.now(UTC).isoformat(),
@@ -157,13 +164,13 @@ def compute_pca(feature_path: str, n_components: int = 5):
         "row_index": dates,
         "ticker": ticker,
     }
-    with open(os.path.join(REGISTRY_DIR, f"pca_{ticker}.json"), "w") as f:
+    with open(os.path.join(target_dir, f"pca_{ticker}.json"), "w") as f:
         json.dump(meta, f)
-    np.save(os.path.join(REGISTRY_DIR, f"pca_transformed_{ticker}.npy"), comps)
+    np.save(os.path.join(target_dir, f"pca_transformed_{ticker}.npy"), comps)
     return {"status": "ok", "pca_meta": meta}
 
 @task
-def cluster_features(feature_path: str, n_clusters: int = 5):
+def cluster_features(feature_path: str, n_clusters: int = 5, run_dir: str | None = None):
     if KMeans is None:
         return {"status": "skipped", "reason": "sklearn not available"}
     df = pd.read_parquet(feature_path)
@@ -176,6 +183,8 @@ def cluster_features(feature_path: str, n_clusters: int = 5):
     km = KMeans(n_clusters=n_clusters, random_state=42)
     labels = km.fit_predict(X_scaled)
     ticker = _ticker_from_path(feature_path)
+    target_dir = run_dir or os.path.join(REGISTRY_DIR, ticker)
+    os.makedirs(target_dir, exist_ok=True)
     meta = {
         "name": "kmeans_clusters",
         "created_at": datetime.now(UTC).isoformat(),
@@ -192,13 +201,13 @@ def cluster_features(feature_path: str, n_clusters: int = 5):
             meta["scaler_scale"] = scaler.scale_.tolist()
         except Exception:
             pass
-    with open(os.path.join(REGISTRY_DIR, f"clusters_{ticker}.json"), "w") as f:
+    with open(os.path.join(target_dir, f"clusters_{ticker}.json"), "w") as f:
         json.dump(meta, f)
-    np.save(os.path.join(REGISTRY_DIR, f"cluster_labels_{ticker}.npy"), labels)
+    np.save(os.path.join(target_dir, f"cluster_labels_{ticker}.npy"), labels)
     return {"status": "ok", "cluster_meta": meta}
 
 @task
-def forecast_ts(feature_path: str, horizon: int = 7):
+def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None):
     if ARIMA is None:
         return {"status": "skipped", "reason": "statsmodels not available"}
     df = pd.read_parquet(feature_path).sort_values("date")
@@ -223,6 +232,8 @@ def forecast_ts(feature_path: str, horizon: int = 7):
     last_date = series.index[-1]
     idx = pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq=freq or "D")
     ticker = _ticker_from_path(feature_path)
+    target_dir = run_dir or os.path.join(REGISTRY_DIR, ticker)
+    os.makedirs(target_dir, exist_ok=True)
     out = {
         "name": "arima-forecast",
         "created_at": datetime.now(UTC).isoformat(),
@@ -236,6 +247,6 @@ def forecast_ts(feature_path: str, horizon: int = 7):
         "confidence_interval": conf.values.tolist(),
         "ticker": ticker,
     }
-    with open(os.path.join(REGISTRY_DIR, f"forecast_{ticker}.json"), "w") as f:
+    with open(os.path.join(target_dir, f"forecast_{ticker}.json"), "w") as f:
         json.dump(out, f)
     return {"status": "ok", "forecast": out}

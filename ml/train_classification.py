@@ -21,10 +21,11 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 FEATURES_DIR = os.path.join(os.path.dirname(__file__), "features")
 REGISTRY_DIR = os.path.join(BASE_DIR, "registry")
 
-def _paths_for_ticker(ticker: str) -> tuple[str, str]:
+def _paths_for_ticker(ticker: str, registry_dir: str | None = None) -> tuple[str, str]:
+    base = registry_dir or REGISTRY_DIR
     t = ticker.upper()
-    model_path = os.path.join(REGISTRY_DIR, f"xgb_classifier_{t}.ubj")
-    meta_path = os.path.join(REGISTRY_DIR, f"xgb_classifier_{t}.json")
+    model_path = os.path.join(base, f"xgb_classifier_{t}.ubj")
+    meta_path = os.path.join(base, f"xgb_classifier_{t}.json")
     return model_path, meta_path
 
 
@@ -129,7 +130,7 @@ def build_labels(df: pd.DataFrame, target_col: str | None = None) -> tuple[pd.Da
     return X, y
 
 
-def train_classifier(ticker: str = "AAPL"):
+def train_classifier(ticker: str = "AAPL", registry_dir: str | None = None):
     if xgb is None:
         raise RuntimeError("xgboost not available")
     df = load_latest_features(ticker)
@@ -161,8 +162,9 @@ def train_classifier(ticker: str = "AAPL"):
     except Exception:
         pass
 
-    os.makedirs(REGISTRY_DIR, exist_ok=True)
-    model_path, meta_path = _paths_for_ticker(ticker)
+    registry = registry_dir or REGISTRY_DIR
+    os.makedirs(registry, exist_ok=True)
+    model_path, meta_path = _paths_for_ticker(ticker, registry)
     booster.save_model(model_path)
     meta = {
         "task": "classification",
@@ -186,6 +188,9 @@ def train_classifier(ticker: str = "AAPL"):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train XGB classifier")
     parser.add_argument("--ticker", default="AAPL", help="Ticker symbol to train on")
+    parser.add_argument("--registry", default=None, help="Override registry directory")
+    parser.add_argument("--run-dir", default=None, help="Optional run directory to place outputs")
     args = parser.parse_args()
-    out = train_classifier(args.ticker)
+    registry = args.run_dir or args.registry
+    out = train_classifier(args.ticker, registry_dir=registry)
     print(json.dumps(out, indent=2))
