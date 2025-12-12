@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse
-import os, json, numpy as np, datetime
+import os, json, math, numpy as np, datetime
 import pandas as pd
+import yfinance as yf
 from ..core import templates, PCA_META_PATH, CLUSTERS_META_PATH, MODEL_REGISTRY
 
 try:
@@ -24,6 +25,75 @@ def root(request: Request):
 @router.get("/data", response_class=HTMLResponse)
 def data_page(request: Request):
     return templates.TemplateResponse("data.html", {"request": request, "title": "Data", "year": datetime.datetime.now().year})
+
+@router.get("/search", response_class=HTMLResponse)
+def search_page(request: Request, ticker: str | None = None, period: str | None = None):
+    ticker_info = None
+    recent = None
+    error = None
+    suggestions = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "JPM", "V", "NFLX"]
+    period_map = {
+        "1w": "7d",
+        "1mo": "1mo",
+        "3mo": "3mo",
+        "6mo": "6mo",
+        "1y": "1y",
+    }
+    chosen_period = period if period in period_map else "1mo"
+    if ticker:
+        t = ticker.strip().upper()
+        try:
+            tk = yf.Ticker(t)
+            info = tk.fast_info if hasattr(tk, "fast_info") else None
+            details = {}
+            try:
+                details = tk.get_info() or {}
+            except Exception:
+                details = {}
+
+            def r3(val):
+                try:
+                    f = float(val)
+                    if math.isfinite(f):
+                        return round(f, 3)
+                except Exception:
+                    return None
+                return None
+            ticker_info = {
+                "symbol": t,
+                "name": details.get("longName") or details.get("shortName"),
+                "currency": getattr(info, "currency", None) if info else details.get("currency"),
+                "last_price": r3(getattr(info, "last_price", None) if info else details.get("currentPrice")),
+                "previous_close": r3(getattr(info, "previous_close", None) if info else details.get("previousClose")),
+                "year_high": r3(getattr(info, "year_high", None) if info else details.get("fiftyTwoWeekHigh")),
+                "year_low": r3(getattr(info, "year_low", None) if info else details.get("fiftyTwoWeekLow")),
+            }
+            df = tk.history(period=period_map[chosen_period])
+            if not df.empty:
+                df = df.reset_index()
+                if "Date" in df.columns:
+                    df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
+                for col in ["Open", "High", "Low", "Close"]:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors="coerce").round(3)
+                recent = df.to_dict(orient="records")
+        except Exception as e:
+            error = f"Lookup failed for {t}: {e}"
+    return templates.TemplateResponse(
+        "search.html",
+        {
+            "request": request,
+            "title": "Stock Search",
+            "year": datetime.datetime.now().year,
+            "ticker": ticker or "",
+            "period": chosen_period,
+            "period_options": list(period_map.keys()),
+            "ticker_info": ticker_info,
+            "recent": recent,
+            "error": error,
+            "suggestions": suggestions,
+        },
+    )
 
 @router.get("/tasks", response_class=HTMLResponse)
 def tasks_page(request: Request):

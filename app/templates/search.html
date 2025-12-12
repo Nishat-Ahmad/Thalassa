@@ -1,0 +1,237 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="section-header">
+  <h1>Stock Search</h1>
+  <p class="muted">Enter a ticker to fetch recent data before running ML tasks.</p>
+  <form method="get" action="/search" class="toolbar" style="gap:10px;flex-wrap:wrap;">
+    <input type="text" name="ticker" value="{{ ticker }}" placeholder="e.g. AAPL" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);min-width:160px;">
+    <label class="muted" style="display:flex;align-items:center;gap:6px;">
+      Range
+      <select name="period" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);">
+        {% for p in period_options %}
+          <option value="{{ p }}" {% if period == p %}selected{% endif %}>{{ '1 week' if p=='1w' else '1 month' if p=='1mo' else '3 months' if p=='3mo' else '6 months' if p=='6mo' else '1 year' }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn btn-primary" type="submit">Fetch</button>
+    <a class="btn" href="/tasks">Go to ML Tasks</a>
+  </form>
+</section>
+
+{% if error %}
+<div class="panel"><p class="muted">{{ error }}</p></div>
+{% endif %}
+
+{% if not ticker and suggestions %}
+<div class="panel">
+  <div class="section-header">
+    <h1>Try These Tickers</h1>
+    <p class="muted">Click to prefill the search box.</p>
+  </div>
+  <div class="toolbar" style="flex-wrap:wrap; gap:8px;">
+    {% for t in suggestions %}
+      <a class="btn btn-outline" href="/search?ticker={{ t }}">{{ t }}</a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if ticker_info %}
+<div class="cards">
+  <div class="card">
+    <h3>{{ ticker_info.symbol }}</h3>
+    <p class="muted">Currency: {{ ticker_info.currency or '-' }}</p>
+    <p><strong>Last:</strong> {{ ticker_info.last_price or '-' }}</p>
+    <p><strong>Prev Close:</strong> {{ ticker_info.previous_close or '-' }}</p>
+  </div>
+  <div class="card">
+    <h3>52W Range</h3>
+    <p><strong>High:</strong> {{ ticker_info.year_high or '-' }}</p>
+    <p><strong>Low:</strong> {{ ticker_info.year_low or '-' }}</p>
+  </div>
+  <div class="card">
+    <h3>Next Steps</h3>
+    <p class="muted">Use this ticker in ML tasks.</p>
+    <div class="form-actions" style="gap:8px;flex-wrap:wrap;">
+      <a class="btn" href="/tasks">Open ML Tasks</a>
+      <a class="btn btn-outline" href="/model-info">Model Info</a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if recent %}
+<div class="panel">
+  <div class="section-header">
+    <h1>Recent Prices</h1>
+  </div>
+  <div class="chart-wrap" style="margin-bottom:16px;">
+    <canvas id="priceChart" height="200"></canvas>
+  </div>
+  <div class="chart-wrap" style="margin-bottom:16px;">
+    <canvas id="volumeChart" height="140"></canvas>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Date</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in recent %}
+        <tr>
+          <td>{{ row['Date'] }}</td>
+          <td>{{ row['Open'] }}</td>
+          <td>{{ row['High'] }}</td>
+          <td>{{ row['Low'] }}</td>
+          <td>{{ row['Close'] }}</td>
+          <td>{{ row['Volume'] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  const recentData = {{ recent | tojson }};
+  const labels = recentData.map(r => r.Date);
+  const open = recentData.map(r => r.Open);
+  const high = recentData.map(r => r.High);
+  const low = recentData.map(r => r.Low);
+  const close = recentData.map(r => r.Close);
+  const volume = recentData.map(r => r.Volume);
+
+  // derive padded y-range for clearer separation on the price chart
+  const priceSeries = [...open, ...high, ...low, ...close].map(Number).filter(x => Number.isFinite(x));
+  const priceMin = priceSeries.length ? Math.min(...priceSeries) : undefined;
+  const priceMax = priceSeries.length ? Math.max(...priceSeries) : undefined;
+  const priceRange = priceSeries.length ? priceMax - priceMin : 0;
+  const pad = priceSeries.length ? Math.max(priceRange * 0.2, 1) : 0;
+  const yMin = priceSeries.length ? priceMin - pad : undefined;
+  const yMax = priceSeries.length ? priceMax + pad : undefined;
+
+  const priceCtx = document.getElementById('priceChart');
+  const volumeCtx = document.getElementById('volumeChart');
+
+  if (priceCtx && Array.isArray(recentData) && recentData.length) {
+    new Chart(priceCtx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            type: 'line',
+            label: 'Open',
+            data: open,
+            borderColor: '#4f8df5',
+            backgroundColor: 'rgba(79, 141, 245, 0.1)',
+            tension: 0.25,
+            borderWidth: 2,
+            yAxisID: 'y',
+          },
+          {
+            type: 'line',
+            label: 'High',
+            data: high,
+            borderColor: '#2bc48a',
+            backgroundColor: 'rgba(43, 196, 138, 0.1)',
+            tension: 0.25,
+            borderWidth: 2,
+            yAxisID: 'y',
+          },
+          {
+            type: 'line',
+            label: 'Low',
+            data: low,
+            borderColor: '#f3a712',
+            backgroundColor: 'rgba(243, 167, 18, 0.1)',
+            tension: 0.25,
+            borderWidth: 2,
+            yAxisID: 'y',
+          },
+          {
+            type: 'line',
+            label: 'Close',
+            data: close,
+            borderColor: '#d66ad2',
+            backgroundColor: 'rgba(214, 106, 210, 0.1)',
+            tension: 0.25,
+            borderWidth: 2,
+            yAxisID: 'y',
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        stacked: false,
+        scales: {
+          y: {
+            type: 'linear',
+            position: 'left',
+            ticks: { color: '#ffffff' },
+            grid: { color: 'rgba(128,128,128,0.2)' },
+            title: { display: true, text: 'Price', color: '#ffffff' },
+            min: yMin,
+            max: yMax,
+            ticks: { color: '#ffffff', count: 6 },
+          },
+          x: {
+            ticks: { color: '#ffffff' },
+            grid: { color: 'rgba(128,128,128,0.1)' },
+            title: { display: true, text: 'Date', color: '#ffffff' },
+          },
+        },
+        plugins: {
+          legend: { position: 'bottom', labels: { color: '#ffffff' } },
+          tooltip: { mode: 'index', intersect: false },
+        },
+      },
+    });
+  }
+</script>
+<script>
+  if (volumeCtx && Array.isArray(recentData) && recentData.length) {
+    new Chart(volumeCtx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Volume',
+            data: volume,
+            backgroundColor: 'rgba(128, 128, 255, 0.35)',
+            borderColor: 'rgba(128, 128, 255, 0.6)',
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          y: {
+            type: 'linear',
+            position: 'left',
+            ticks: { color: '#ffffff' },
+            grid: { color: 'rgba(128,128,128,0.2)' },
+            title: { display: true, text: 'Volume', color: '#ffffff' },
+          },
+          x: {
+            ticks: { color: '#ffffff' },
+            grid: { color: 'rgba(128,128,128,0.1)' },
+            title: { display: true, text: 'Date', color: '#ffffff' },
+          },
+        },
+        plugins: {
+          legend: { position: 'bottom', labels: { color: '#ffffff' } },
+          tooltip: { mode: 'index', intersect: false },
+        },
+      },
+    });
+  }
+</script>
+{% endif %}
+{% endblock %}
