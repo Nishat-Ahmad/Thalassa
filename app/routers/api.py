@@ -1,10 +1,18 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Request
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Request, Form
 from pydantic import BaseModel
 import os, json, numpy as np, datetime
+import sys
+from pathlib import Path
 import pandas as pd
 from ..core import (
-    XGB_META_PATH, XGB_MODEL_PATH, XGB_CLS_META_PATH, PCA_META_PATH, CLUSTERS_META_PATH,
-    MODEL_REGISTRY, FORECAST_META_PATH, templates
+    MODEL_REGISTRY,
+    templates,
+    xgb_paths,
+    xgb_classifier_paths,
+    pca_paths,
+    cluster_paths,
+    forecast_path,
+    association_path,
 )
 from ..services.models import load_xgb, load_xgb_classifier, align_to_booster_features
 
@@ -15,6 +23,19 @@ except Exception:
 
 router = APIRouter()
 APP_START = datetime.datetime.utcnow()
+
+
+def _safe_ticker(ticker: str | None) -> str:
+    return (ticker or "AAPL").upper()
+
+
+def _load_pipeline():
+    # Lazily import pipeline to avoid package path issues and heavy deps on startup.
+    root = Path(__file__).resolve().parents[2]
+    if str(root) not in sys.path:
+        sys.path.append(str(root))
+    from flows.flow import pipeline  # type: ignore
+    return pipeline
 
 
 def _uptime_seconds() -> float:
@@ -36,6 +57,20 @@ def _humanize(seconds: float) -> str:
     return " ".join(parts)
 
 
+@router.post("/run-pipeline")
+def run_pipeline(
+    ticker_query: str | None = Query(None, alias="ticker"),
+    ticker_form: str | None = Form(None, alias="ticker"),
+):
+    t = _safe_ticker(ticker_form or ticker_query)
+    try:
+        pipeline = _load_pipeline()
+        result = pipeline(t)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline failed for {t}: {e}")
+    return {"status": "ok", "ticker": t, "result_keys": list(result.keys()) if result else []}
+
+
 def _load_json(path: str):
     if not os.path.exists(path):
         return None
@@ -46,8 +81,14 @@ def _load_json(path: str):
         return None
 
 
-def _collect_artifacts():
+def _collect_artifacts(ticker: str | None = None):
     items = []
+
+    xgb_model_path, xgb_meta_path = xgb_paths(ticker)
+    xgb_cls_model_path, xgb_cls_meta_path = xgb_classifier_paths(ticker)
+    pca_meta_path, pca_transformed_path = pca_paths(ticker)
+    clusters_meta_path, _ = cluster_paths(ticker)
+    forecast_meta_path = forecast_path(ticker)
 
     def add(name: str, path: str, extractor=None):
         if os.path.exists(path):
@@ -61,18 +102,18 @@ def _collect_artifacts():
         else:
             items.append({"name": name, "status": "missing", "detail": None})
 
-    xgb_meta = _load_json(XGB_META_PATH)
-    xgb_cls_meta = _load_json(XGB_CLS_META_PATH)
-    pca_meta = _load_json(PCA_META_PATH)
-    cluster_meta = _load_json(CLUSTERS_META_PATH)
-    forecast_meta = _load_json(FORECAST_META_PATH)
+    xgb_meta = _load_json(xgb_meta_path)
+    xgb_cls_meta = _load_json(xgb_cls_meta_path)
+    pca_meta = _load_json(pca_meta_path)
+    cluster_meta = _load_json(clusters_meta_path)
+    forecast_meta = _load_json(forecast_meta_path)
 
-    add("XGB Regressor", XGB_MODEL_PATH, lambda: f"file size {round(os.path.getsize(XGB_MODEL_PATH)/1024,1)} KB")
-    add("XGB Regressor Meta", XGB_META_PATH, lambda: f"{len(xgb_meta.get('features', [])) if xgb_meta else 0} features")
-    add("Classifier Meta", XGB_CLS_META_PATH, lambda: f"{len(xgb_cls_meta.get('features', [])) if xgb_cls_meta else 0} features")
-    add("PCA Metadata", PCA_META_PATH, lambda: f"{len(pca_meta.get('feature_order', [])) if pca_meta else 0} feature dims")
-    add("Cluster Metadata", CLUSTERS_META_PATH, lambda: f"{len(cluster_meta.get('centers', [])) if cluster_meta else 0} centers")
-    add("Forecast", FORECAST_META_PATH, lambda: f"generated {forecast_meta.get('generated_at', 'unknown') if forecast_meta else 'unknown'}")
+    add("XGB Regressor", xgb_model_path, lambda: f"file size {round(os.path.getsize(xgb_model_path)/1024,1)} KB")
+    add("XGB Regressor Meta", xgb_meta_path, lambda: f"{len(xgb_meta.get('features', [])) if xgb_meta else 0} features")
+    add("Classifier Meta", xgb_cls_meta_path, lambda: f"{len(xgb_cls_meta.get('features', [])) if xgb_cls_meta else 0} features")
+    add("PCA Metadata", pca_meta_path, lambda: f"{len(pca_meta.get('feature_order', [])) if pca_meta else 0} feature dims")
+    add("Cluster Metadata", clusters_meta_path, lambda: f"{len(cluster_meta.get('centers', [])) if cluster_meta else 0} centers")
+    add("Forecast", forecast_meta_path, lambda: f"generated {forecast_meta.get('generated_at', 'unknown') if forecast_meta else 'unknown'}")
 
     return items
 
@@ -103,13 +144,20 @@ def health(request: Request):
     return payload
 
 @router.get("/model-info")
-def model_info(request: Request):
-    xgb_meta = _load_json(XGB_META_PATH)
-    xgb_cls_meta = _load_json(XGB_CLS_META_PATH)
-    pca_meta = _load_json(PCA_META_PATH)
-    cluster_meta = _load_json(CLUSTERS_META_PATH)
-    forecast_meta = _load_json(FORECAST_META_PATH)
-    artifacts = _collect_artifacts()
+def model_info(request: Request, ticker: str = Query("AAPL")):
+    t = _safe_ticker(ticker)
+    xgb_model_path, xgb_meta_path = xgb_paths(t)
+    xgb_cls_model_path, xgb_cls_meta_path = xgb_classifier_paths(t)
+    pca_meta_path, _ = pca_paths(t)
+    cluster_meta_path, _ = cluster_paths(t)
+    forecast_meta_path = forecast_path(t)
+
+    xgb_meta = _load_json(xgb_meta_path)
+    xgb_cls_meta = _load_json(xgb_cls_meta_path)
+    pca_meta = _load_json(pca_meta_path)
+    cluster_meta = _load_json(cluster_meta_path)
+    forecast_meta = _load_json(forecast_meta_path)
+    artifacts = _collect_artifacts(t)
 
     legacy_meta: dict = {}
     if xgb_meta:
@@ -137,54 +185,64 @@ def model_info(request: Request):
                 "cluster_meta": cluster_meta,
                 "forecast_meta": forecast_meta,
                 "artifacts": artifacts,
+                "ticker": t,
             },
         )
 
     return legacy_meta
 
 @router.get("/expected-features")
-def expected_features():
-    if not os.path.exists(XGB_META_PATH):
+def expected_features(ticker: str = Query("AAPL")):
+    t = _safe_ticker(ticker)
+    _, meta_path = xgb_paths(t)
+    if not os.path.exists(meta_path):
         raise HTTPException(status_code=404, detail="No trained XGB model found")
-    with open(XGB_META_PATH, "r") as f:
+    with open(meta_path, "r") as f:
         meta = json.load(f)
     raw_feats = meta.get("features", [])
     feats = [f[0] if isinstance(f, (list, tuple)) else f for f in raw_feats]
     return {"features": feats}
 
 @router.get("/expected-features-class")
-def expected_features_class():
-    if not os.path.exists(XGB_CLS_META_PATH):
+def expected_features_class(ticker: str = Query("AAPL")):
+    t = _safe_ticker(ticker)
+    _, meta_path = xgb_classifier_paths(t)
+    if not os.path.exists(meta_path):
         raise HTTPException(status_code=404, detail="No trained classifier found")
-    with open(XGB_CLS_META_PATH, "r") as f:
+    with open(meta_path, "r") as f:
         meta = json.load(f)
     feats = [str(f) for f in meta.get("features", [])]
     return {"features": feats}
 
 @router.get("/pca-info")
-def pca_info():
-    if not os.path.exists(PCA_META_PATH):
+def pca_info(ticker: str = Query("AAPL")):
+    t = _safe_ticker(ticker)
+    meta_path, _ = pca_paths(t)
+    if not os.path.exists(meta_path):
         raise HTTPException(status_code=404, detail="PCA metadata not found")
-    with open(PCA_META_PATH, "r") as f:
+    with open(meta_path, "r") as f:
         return json.load(f)
 
 @router.get("/cluster-info")
-def cluster_info():
-    if not os.path.exists(CLUSTERS_META_PATH):
+def cluster_info(ticker: str = Query("AAPL")):
+    t = _safe_ticker(ticker)
+    meta_path, labels_path = cluster_paths(t)
+    if not os.path.exists(meta_path):
         raise HTTPException(status_code=404, detail="Cluster metadata not found")
-    with open(CLUSTERS_META_PATH, "r") as f:
+    with open(meta_path, "r") as f:
         meta = json.load(f)
-    labels_path = os.path.join(MODEL_REGISTRY, "cluster_labels.npy")
     if os.path.exists(labels_path):
         labels = np.load(labels_path)
         meta["latest_label"] = int(labels[-1]) if len(labels) else None
     return meta
 
 @router.post("/predict-cluster")
-def predict_cluster(req: PredictRequest):
-    if not os.path.exists(CLUSTERS_META_PATH):
+def predict_cluster(req: PredictRequest, ticker: str = Query("AAPL")):
+    t = _safe_ticker(ticker)
+    meta_path, _ = cluster_paths(t)
+    if not os.path.exists(meta_path):
         raise HTTPException(status_code=404, detail="Cluster metadata not found")
-    with open(CLUSTERS_META_PATH, "r") as f:
+    with open(meta_path, "r") as f:
         meta = json.load(f)
     centers = np.array(meta.get("centers", []), dtype=float)
     feat_order = meta.get("feature_order", [])
@@ -203,8 +261,8 @@ def predict_cluster(req: PredictRequest):
     return {"cluster": assigned, "distances": dists.tolist()}
 
 @router.post("/predict")
-def predict(req: PredictRequest):
-    booster, feat_names = load_xgb()
+def predict(req: PredictRequest, ticker: str = Query("AAPL")):
+    booster, feat_names = load_xgb(_safe_ticker(ticker))
     if booster is None or not feat_names:
         raise HTTPException(status_code=400, detail="XGB model not available. Train it first.")
     if len(req.features) != len(feat_names):
@@ -215,8 +273,8 @@ def predict(req: PredictRequest):
     return {"model": "xgb", "prediction": pred}
 
 @router.post("/predict-class")
-def predict_class(req: PredictRequest):
-    booster, feat_names = load_xgb_classifier()
+def predict_class(req: PredictRequest, ticker: str = Query("AAPL")):
+    booster, feat_names = load_xgb_classifier(_safe_ticker(ticker))
     if booster is None or not feat_names:
         raise HTTPException(status_code=400, detail="Classifier not available. Train it first.")
     if len(req.features) != len(feat_names):
@@ -234,8 +292,8 @@ async def upload_csv(file: UploadFile = File(...)):
     return {"status": "ok", "size_kb": size_kb}
 
 @router.post("/predict-batch")
-async def predict_batch(file: UploadFile = File(...)):
-    booster, feat_names = load_xgb()
+async def predict_batch(file: UploadFile = File(...), ticker: str = Query("AAPL")):
+    booster, feat_names = load_xgb(_safe_ticker(ticker))
     if booster is None or not feat_names:
         raise HTTPException(status_code=400, detail="XGB model not available. Train it first.")
     try:
@@ -250,20 +308,23 @@ async def predict_batch(file: UploadFile = File(...)):
     return {"count": int(len(preds)), "predictions": preds.tolist()}
 
 @router.get("/forecast")
-def forecast():
-    if not os.path.exists(FORECAST_META_PATH):
+def forecast(ticker: str = Query("AAPL")):
+    t = _safe_ticker(ticker)
+    forecast_meta_path = forecast_path(t)
+    if not os.path.exists(forecast_meta_path):
         raise HTTPException(status_code=404, detail="Forecast not found. Run the pipeline to generate it.")
-    with open(FORECAST_META_PATH, "r") as f:
+    with open(forecast_meta_path, "r") as f:
         return json.load(f)
 
 @router.get("/recommend")
 def recommend(date: str | None = Query(None), k: int = Query(5, gt=0, le=50), ticker: str = Query("AAPL")):
-    if not os.path.exists(PCA_META_PATH):
+    t = _safe_ticker(ticker)
+    pca_meta_path, pca_trans_path = pca_paths(t)
+    if not os.path.exists(pca_meta_path):
         raise HTTPException(status_code=404, detail="PCA metadata not found")
-    pca_trans_path = os.path.join(MODEL_REGISTRY, "pca_transformed.npy")
     if not os.path.exists(pca_trans_path):
         raise HTTPException(status_code=404, detail="PCA transformed matrix not found. Run pipeline.")
-    with open(PCA_META_PATH, "r") as f:
+    with open(pca_meta_path, "r") as f:
         meta = json.load(f)
     comps = np.load(pca_trans_path)
     row_index = meta.get("row_index", [])
@@ -278,7 +339,7 @@ def recommend(date: str | None = Query(None), k: int = Query(5, gt=0, le=50), ti
     dists = np.linalg.norm(comps - target, axis=1)
     dists[idx] = np.inf
     nn_idx = np.argsort(dists)[:k]
-    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{ticker}.parquet")
+    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
     closes = {}
     if os.path.exists(feat_path):
         fdf = pd.read_parquet(feat_path)
@@ -291,13 +352,14 @@ def recommend(date: str | None = Query(None), k: int = Query(5, gt=0, le=50), ti
     return {"target_date": date, "k": k, "neighbors": neighbors}
 
 @router.post("/recommend")
-def recommend_from_features(req: PredictRequest, k: int = Query(5, gt=0, le=50)):
-    if not os.path.exists(PCA_META_PATH):
+def recommend_from_features(req: PredictRequest, k: int = Query(5, gt=0, le=50), ticker: str = Query("AAPL")):
+    t = _safe_ticker(ticker)
+    pca_meta_path, pca_trans_path = pca_paths(t)
+    if not os.path.exists(pca_meta_path):
         raise HTTPException(status_code=404, detail="PCA metadata not found")
-    pca_trans_path = os.path.join(MODEL_REGISTRY, "pca_transformed.npy")
     if not os.path.exists(pca_trans_path):
         raise HTTPException(status_code=404, detail="PCA transformed matrix not found. Run pipeline.")
-    with open(PCA_META_PATH, "r") as f:
+    with open(pca_meta_path, "r") as f:
         meta = json.load(f)
     feat_order = meta.get("feature_order", [])
     mean = np.array(meta.get("mean", []), dtype=float)
@@ -321,8 +383,8 @@ def recommend_from_features(req: PredictRequest, k: int = Query(5, gt=0, le=50))
     return {"k": k, "neighbors": neighbors}
 
 @router.get("/association-info")
-def association_info():
-    path = os.path.join(MODEL_REGISTRY, "association.json")
+def association_info(ticker: str = Query("AAPL")):
+    path = association_path(_safe_ticker(ticker))
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Association rules not found. Run association flow.")
     with open(path, "r") as f:

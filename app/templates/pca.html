@@ -3,7 +3,10 @@
 <section class="section-header">
   <h1>PCA Overview</h1>
   <p class="muted">Explained variance and components from the latest PCA run.</p>
-  <div class="toolbar"><a class="btn" href="/tasks">← Back to ML Tasks</a></div>
+  <div class="toolbar">
+    <a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">← Back to ML Tasks</a>
+    <span class="muted">Ticker: <strong>{{ ticker or 'AAPL' }}</strong></span>
+  </div>
   {% if error %}
     <p class="alert">{{ error }}</p>
   {% endif %}
@@ -29,7 +32,7 @@
       <p class="muted">First 25 features shown.</p>
       <code style="display:block;white-space:pre-wrap">{{ pca.feature_order[:25]|join(', ') }}</code>
       <div class="form-actions" style="margin-top:8px">
-        <a class="btn btn-outline" href="/pca-info" target="_blank">Open PCA JSON</a>
+        <a class="btn btn-outline" href="/pca-info{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Open PCA JSON</a>
       </div>
     </section>
   {% endif %}

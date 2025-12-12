@@ -28,6 +28,11 @@ REGISTRY_DIR = os.path.join(os.path.dirname(__file__), "..", "ml", "registry")
 for d in [DATA_DIR, FEATURE_DIR, REGISTRY_DIR]:
     os.makedirs(d, exist_ok=True)
 
+
+def _ticker_from_path(path: str) -> str:
+    base = os.path.splitext(os.path.basename(path))[0]
+    return base.upper()
+
 @task(retries=2, retry_delay_seconds=10)
 def ingest(ticker: str, period: str = "2y"):
     df = yf.download(ticker, period=period, progress=False)
@@ -95,22 +100,27 @@ def train_regressor(feature_path: str):
     rmse = float(np.sqrt(((y_test - pred) ** 2).mean()))
     mae = float(np.abs(y_test - pred).mean())
     booster = model.get_booster()
-    booster.save_model(os.path.join(REGISTRY_DIR, "xgb_model.ubj"))
+    ticker = _ticker_from_path(feature_path)
+    model_path = os.path.join(REGISTRY_DIR, f"xgb_model_{ticker}.ubj")
+    meta_path = os.path.join(REGISTRY_DIR, f"xgb_model_{ticker}.json")
+    booster.save_model(model_path)
     meta = {
         "name": "xgb-regressor",
         "created_at": datetime.now(UTC).isoformat(),
         "features": list(X.columns),
         "metrics": {"rmse": rmse, "mae": mae},
-        "artifact": "xgb_model.ubj",
+        "artifact": os.path.basename(model_path),
+        "ticker": ticker,
     }
-    with open(os.path.join(REGISTRY_DIR, "xgb_model.json"), "w") as f:
+    with open(meta_path, "w") as f:
         json.dump(meta, f)
-    return os.path.join(REGISTRY_DIR, "xgb_model.json")
+    return meta_path
 
 @task
 def train_classification(feature_path: str):
-    script = os.path.join(os.path.dirname(__file__), "..", "ml", "scripts", "train_classification.py")
-    process = Popen(["python", script], stdout=PIPE, stderr=PIPE)
+    ticker = _ticker_from_path(feature_path)
+    script = os.path.join(os.path.dirname(__file__), "..", "ml", "train_classification.py")
+    process = Popen(["python", script, "--ticker", ticker], stdout=PIPE, stderr=PIPE)
     stdout, stderr = process.communicate()
     if process.returncode != 0:
         raise RuntimeError(f"Classification training failed: {stderr.decode()}")
@@ -135,6 +145,7 @@ def compute_pca(feature_path: str, n_components: int = 5):
         dates = pd.to_datetime(df.loc[X.index, "date"]).dt.strftime("%Y-%m-%d").tolist()
     except Exception:
         dates = [str(i) for i in X.index.tolist()]
+    ticker = _ticker_from_path(feature_path)
     meta = {
         "name": "pca_features",
         "created_at": datetime.now(UTC).isoformat(),
@@ -144,10 +155,11 @@ def compute_pca(feature_path: str, n_components: int = 5):
         "mean": pca.mean_.tolist(),
         "feature_order": feature_cols,
         "row_index": dates,
+        "ticker": ticker,
     }
-    with open(os.path.join(REGISTRY_DIR, "pca.json"), "w") as f:
+    with open(os.path.join(REGISTRY_DIR, f"pca_{ticker}.json"), "w") as f:
         json.dump(meta, f)
-    np.save(os.path.join(REGISTRY_DIR, "pca_transformed.npy"), comps)
+    np.save(os.path.join(REGISTRY_DIR, f"pca_transformed_{ticker}.npy"), comps)
     return {"status": "ok", "pca_meta": meta}
 
 @task
@@ -163,6 +175,7 @@ def cluster_features(feature_path: str, n_clusters: int = 5):
     X_scaled = scaler.fit_transform(X) if scaler else X.to_numpy()
     km = KMeans(n_clusters=n_clusters, random_state=42)
     labels = km.fit_predict(X_scaled)
+    ticker = _ticker_from_path(feature_path)
     meta = {
         "name": "kmeans_clusters",
         "created_at": datetime.now(UTC).isoformat(),
@@ -171,6 +184,7 @@ def cluster_features(feature_path: str, n_clusters: int = 5):
         "centers": km.cluster_centers_.tolist(),
         "feature_order": feature_cols,
         "label_counts": {int(k): int(v) for k, v in zip(*np.unique(labels, return_counts=True))},
+        "ticker": ticker,
     }
     if scaler is not None:
         try:
@@ -178,9 +192,9 @@ def cluster_features(feature_path: str, n_clusters: int = 5):
             meta["scaler_scale"] = scaler.scale_.tolist()
         except Exception:
             pass
-    with open(os.path.join(REGISTRY_DIR, "clusters.json"), "w") as f:
+    with open(os.path.join(REGISTRY_DIR, f"clusters_{ticker}.json"), "w") as f:
         json.dump(meta, f)
-    np.save(os.path.join(REGISTRY_DIR, "cluster_labels.npy"), labels)
+    np.save(os.path.join(REGISTRY_DIR, f"cluster_labels_{ticker}.npy"), labels)
     return {"status": "ok", "cluster_meta": meta}
 
 @task
@@ -190,7 +204,13 @@ def forecast_ts(feature_path: str, horizon: int = 7):
     df = pd.read_parquet(feature_path).sort_values("date")
     if "Close" not in df.columns:
         return {"status": "skipped", "reason": "Close column missing"}
-    series = df["Close"].astype(float)
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date"])
+    series = df.set_index("date")["Close"].astype(float).sort_index()
+    freq = pd.infer_freq(series.index)
+    if freq is None:
+        freq = "D"
+    series = series.asfreq(freq).ffill()
     order = (1, 1, 1)
     try:
         model = ARIMA(series, order=order)
@@ -200,8 +220,9 @@ def forecast_ts(feature_path: str, horizon: int = 7):
         conf = conf_res.conf_int()
     except Exception as e:
         return {"status": "error", "message": str(e)}
-    last_date = pd.to_datetime(df["date"].iloc[-1])
-    idx = pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq="D")
+    last_date = series.index[-1]
+    idx = pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq=freq or "D")
+    ticker = _ticker_from_path(feature_path)
     out = {
         "name": "arima-forecast",
         "created_at": datetime.now(UTC).isoformat(),
@@ -213,7 +234,8 @@ def forecast_ts(feature_path: str, horizon: int = 7):
         "predictions": [float(x) for x in forecast.tolist()],
         "dates": [d.isoformat() for d in idx],
         "confidence_interval": conf.values.tolist(),
+        "ticker": ticker,
     }
-    with open(os.path.join(REGISTRY_DIR, "forecast.json"), "w") as f:
+    with open(os.path.join(REGISTRY_DIR, f"forecast_{ticker}.json"), "w") as f:
         json.dump(out, f)
     return {"status": "ok", "forecast": out}

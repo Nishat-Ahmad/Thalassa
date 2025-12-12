@@ -1,7 +1,7 @@
 """
 Standalone PCA training script to mirror the Prefect flow's PCA step.
 Reads a feature parquet/CSV, fits PCA on numeric columns, and saves artifacts
-(pca.json + pca_transformed.npy) to the registry directory.
+(pca_{ticker}.json + pca_transformed_{ticker}.npy) to the registry directory.
 """
 
 import argparse
@@ -60,10 +60,10 @@ def fit_pca(df: pd.DataFrame, n_components: int) -> tuple[dict, np.ndarray]:
     return meta, comps
 
 
-def save_artifacts(meta: dict, comps: np.ndarray, registry_dir: str) -> tuple[str, str]:
+def save_artifacts(meta: dict, comps: np.ndarray, registry_dir: str, ticker: str) -> tuple[str, str]:
     os.makedirs(registry_dir, exist_ok=True)
-    meta_path = os.path.join(registry_dir, "pca.json")
-    comps_path = os.path.join(registry_dir, "pca_transformed.npy")
+    meta_path = os.path.join(registry_dir, f"pca_{ticker}.json")
+    comps_path = os.path.join(registry_dir, f"pca_transformed_{ticker}.npy")
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2)
     np.save(comps_path, comps)
@@ -86,8 +86,10 @@ def main():
     args = parser.parse_args()
 
     df = load_features(args.features)
+    ticker = os.path.splitext(os.path.basename(args.features))[0].upper()
     meta, comps = fit_pca(df, args.n_components)
-    meta_path, comps_path = save_artifacts(meta, comps, args.registry)
+    meta["ticker"] = ticker
+    meta_path, comps_path = save_artifacts(meta, comps, args.registry, ticker)
     print(json.dumps({"status": "ok", "pca_meta": meta_path, "pca_transformed": comps_path}, indent=2))
 
 

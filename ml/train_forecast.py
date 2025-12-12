@@ -1,7 +1,7 @@
 """
 Standalone ARIMA forecast trainer (mirrors forecast_ts in flows/flow.py).
 Loads a feature parquet/CSV with a Close column, fits ARIMA(1,1,1), and writes
-forecast.json into the registry directory.
+forecast_{ticker}.json into the registry directory.
 """
 
 import argparse
@@ -32,6 +32,17 @@ def load_series(path: str) -> pd.Series:
 
 def fit_arima(df: pd.DataFrame, horizon: int):
     series = df["Close"].astype(float)
+        df = df.copy()
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"], errors="coerce")
+            df = df.dropna(subset=["date"]).sort_values("date")
+            series = df.set_index("date")["Close"].astype(float)
+            freq = pd.infer_freq(series.index)
+            if freq is None:
+                freq = "D"
+            series = series.asfreq(freq).ffill()
+        else:
+            series = df["Close"].astype(float)
     order = (1, 1, 1)
     model = ARIMA(series, order=order)
     fitted = model.fit()
@@ -43,7 +54,7 @@ def fit_arima(df: pd.DataFrame, horizon: int):
     return fitted, forecast, conf, idx, order, series
 
 
-def save_forecast(forecast, conf, idx, order, series, registry_dir: str):
+def save_forecast(forecast, conf, idx, order, series, registry_dir: str, ticker: str):
     os.makedirs(registry_dir, exist_ok=True)
     out = {
         "name": "arima-forecast",
@@ -58,8 +69,9 @@ def save_forecast(forecast, conf, idx, order, series, registry_dir: str):
         "predictions": [float(x) for x in forecast.tolist()],
         "dates": [d.isoformat() if not isinstance(d, (int, float)) else str(d) for d in idx],
         "confidence_interval": conf.values.tolist(),
+        "ticker": ticker.upper(),
     }
-    out_path = os.path.join(registry_dir, "forecast.json")
+    out_path = os.path.join(registry_dir, f"forecast_{ticker.upper()}.json")
     with open(out_path, "w") as f:
         json.dump(out, f, indent=2)
     return out_path
@@ -81,8 +93,9 @@ def main():
     args = parser.parse_args()
 
     df = load_series(args.features)
+    ticker = os.path.splitext(os.path.basename(args.features))[0]
     fitted, forecast, conf, idx, order, series = fit_arima(df, args.horizon)
-    out_path = save_forecast(forecast, conf, idx, order, series, args.registry)
+    out_path = save_forecast(forecast, conf, idx, order, series, args.registry, ticker)
     print(json.dumps({"status": "ok", "forecast": out_path}, indent=2))
 
 

@@ -3,7 +3,10 @@
 <section class="section-header">
   <h1>Recommendations (PCA Nearest Neighbors)</h1>
   <p class="muted">Find days most similar to a target date or a custom feature vector projected into PCA space.</p>
-  <div class="toolbar"><a class="btn" href="/tasks">← Back to ML Tasks</a></div>
+  <div class="toolbar">
+    <a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">← Back to ML Tasks</a>
+    <span class="muted">Ticker: <strong>{{ ticker or 'AAPL' }}</strong></span>
+  </div>
   {% if error %}<p class="alert">{{ error }}</p>{% endif %}
 </section>
 
@@ -11,6 +14,7 @@
   <div class="panel">
     <h3>By Date</h3>
     <form action="/recommend-page" method="post" class="form">
+      <input type="hidden" name="ticker" value="{{ ticker or '' }}" />
       <input type="hidden" name="mode" value="date" />
       <div class="form-control">
         <label for="date">Recent Dates</label>
@@ -35,6 +39,7 @@
     <h3>By Feature Vector</h3>
     <p class="muted">Paste comma-separated values matching the PCA feature order (shown below).</p>
     <form action="/recommend-page" method="post" class="form">
+      <input type="hidden" name="ticker" value="{{ ticker or '' }}" />
       <input type="hidden" name="mode" value="vector" />
       <div class="form-control">
         <label for="values">Feature Values</label>

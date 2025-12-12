@@ -1,7 +1,7 @@
 """
 Standalone association rules trainer (mirrors flows/association.py).
 Loads a feature parquet/CSV, derives simple binarized signals, runs Apriori +
-association_rules, and saves association.json to the registry directory.
+association_rules, and saves association_{ticker}.json to the registry directory.
 """
 
 import argparse
@@ -97,13 +97,14 @@ def main():
 
     df = load_features(args.features)
     result = train_association(df, args.min_support, args.min_confidence, args.max_rules)
+    ticker = os.path.splitext(os.path.basename(args.features))[0]
     out = {
-        "ticker": os.path.splitext(os.path.basename(args.features))[0],
+        "ticker": ticker,
         **result,
     }
 
     os.makedirs(args.registry, exist_ok=True)
-    out_path = os.path.join(args.registry, "association.json")
+    out_path = os.path.join(args.registry, f"association_{ticker}.json")
     with open(out_path, "w") as f:
         json.dump(out, f, indent=2)
 

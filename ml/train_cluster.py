@@ -1,7 +1,7 @@
 """
 Standalone clustering training script (mirrors Prefect flow cluster_features).
 Reads a feature parquet/CSV, fits KMeans on numeric columns (excluding date/ticker),
-and saves clusters.json + cluster_labels.npy to the registry.
+and saves clusters_{ticker}.json + cluster_labels_{ticker}.npy to the registry.
 """
 
 import argparse
@@ -58,10 +58,10 @@ def fit_clusters(df: pd.DataFrame, n_clusters: int) -> tuple[dict, np.ndarray]:
     return meta, labels
 
 
-def save_artifacts(meta: dict, labels: np.ndarray, registry_dir: str) -> tuple[str, str]:
+def save_artifacts(meta: dict, labels: np.ndarray, registry_dir: str, ticker: str) -> tuple[str, str]:
     os.makedirs(registry_dir, exist_ok=True)
-    meta_path = os.path.join(registry_dir, "clusters.json")
-    labels_path = os.path.join(registry_dir, "cluster_labels.npy")
+    meta_path = os.path.join(registry_dir, f"clusters_{ticker}.json")
+    labels_path = os.path.join(registry_dir, f"cluster_labels_{ticker}.npy")
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2)
     np.save(labels_path, labels)
@@ -84,8 +84,10 @@ def main():
     args = parser.parse_args()
 
     df = load_features(args.features)
+    ticker = os.path.splitext(os.path.basename(args.features))[0].upper()
     meta, labels = fit_clusters(df, args.n_clusters)
-    meta_path, labels_path = save_artifacts(meta, labels, args.registry)
+    meta["ticker"] = ticker
+    meta_path, labels_path = save_artifacts(meta, labels, args.registry, ticker)
     print(json.dumps({"status": "ok", "clusters_meta": meta_path, "cluster_labels": labels_path}, indent=2))
 
 

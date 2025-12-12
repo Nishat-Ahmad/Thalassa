@@ -7,7 +7,8 @@ from mlxtend.frequent_patterns import apriori, association_rules
 
 REGISTRY_DIR = os.path.join(os.path.dirname(__file__), "..", "ml", "registry")
 FEATURES_DIR = os.path.join(os.path.dirname(__file__), "..", "ml", "features")
-OUTPUT_PATH = os.path.join(REGISTRY_DIR, "association.json")
+def _output_path(ticker: str) -> str:
+    return os.path.join(REGISTRY_DIR, f"association_{ticker.upper()}.json")
 
 
 def _build_itemset_frame(df: pd.DataFrame) -> pd.DataFrame:
@@ -68,7 +69,7 @@ def compute_association_rules(ticker: str = "AAPL", min_support: float = 0.1, mi
             "rules": serialized,
         }
     os.makedirs(REGISTRY_DIR, exist_ok=True)
-    with open(OUTPUT_PATH, "w") as f:
+    with open(_output_path(ticker), "w") as f:
         json.dump(result, f, indent=2)
     return result
 

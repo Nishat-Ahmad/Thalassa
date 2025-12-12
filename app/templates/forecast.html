@@ -3,7 +3,10 @@
 <section class="section-header">
   <h1>ARIMA Forecast</h1>
   <p class="muted">View persisted forecast from pipeline and generate on-demand forecasts for a chosen horizon.</p>
-  <div class="toolbar"><a class="btn" href="/tasks">← Back to ML Tasks</a></div>
+  <div class="toolbar">
+    <a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">← Back to ML Tasks</a>
+    <span class="muted">Ticker: <strong>{{ ticker or 'AAPL' }}</strong></span>
+  </div>
   {% if error %}<p class="alert">{{ error }}</p>{% endif %}
 </section>
 
@@ -25,7 +28,7 @@
         <code style="display:block;white-space:pre-wrap">{{ forecast.confidence_interval }}</code>
       </details>
       <div style="margin-top:8px">
-        <a class="btn btn-outline" href="/forecast" target="_blank">Open JSON</a>
+        <a class="btn btn-outline" href="/forecast{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Open JSON</a>
       </div>
     {% else %}
       <p class="muted">No persisted forecast yet. Run the pipeline to generate one.</p>
@@ -34,6 +37,7 @@
   <div class="panel">
     <h3>Generate New Forecast</h3>
     <form action="/forecast-page" method="post" class="form">
+      <input type="hidden" name="ticker" value="{{ ticker or '' }}" />
       <div class="form-control">
         <label for="horizon">Horizon (days)</label>
         <input id="horizon" type="number" name="horizon" value="7" min="1" max="30" required />

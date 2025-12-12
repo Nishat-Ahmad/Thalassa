@@ -3,7 +3,15 @@ from fastapi.responses import HTMLResponse
 import os, json, math, numpy as np, datetime
 import pandas as pd
 import yfinance as yf
-from ..core import templates, PCA_META_PATH, CLUSTERS_META_PATH, MODEL_REGISTRY
+from ..core import (
+    templates,
+    MODEL_REGISTRY,
+    xgb_classifier_paths,
+    pca_paths,
+    cluster_paths,
+    forecast_path,
+    association_path,
+)
 
 try:
     from statsmodels.tsa.arima.model import ARIMA
@@ -15,6 +23,10 @@ except Exception:
     xgb = None
 
 router = APIRouter()
+
+
+def _safe_ticker(ticker: str | None) -> str:
+    return (ticker or "AAPL").upper()
 
 @router.get("/", response_class=HTMLResponse)
 def root(request: Request):
@@ -96,8 +108,12 @@ def search_page(request: Request, ticker: str | None = None, period: str | None 
     )
 
 @router.get("/tasks", response_class=HTMLResponse)
-def tasks_page(request: Request):
-    return templates.TemplateResponse("tasks.html", {"request": request, "title": "Tasks", "year": datetime.datetime.now().year})
+def tasks_page(request: Request, ticker: str | None = None):
+    t = _safe_ticker(ticker)
+    return templates.TemplateResponse(
+        "tasks.html",
+        {"request": request, "title": "Tasks", "year": datetime.datetime.now().year, "ticker": t},
+    )
 
 # Roadmap page removed per request
 
@@ -110,73 +126,110 @@ def upload_page(request: Request):
     return templates.TemplateResponse("upload.html", {"request": request, "title": "Upload", "year": datetime.datetime.now().year})
 
 @router.get("/classify", response_class=HTMLResponse)
-def classify_page(request: Request):
-    XGB_CLS_META_PATH = os.path.join(MODEL_REGISTRY, "xgb_classifier.json")
+def classify_page(request: Request, ticker: str | None = None):
+    t = _safe_ticker(ticker)
+    _, cls_meta_path = xgb_classifier_paths(t)
     feats = []
-    if os.path.exists(XGB_CLS_META_PATH):
-        with open(XGB_CLS_META_PATH, "r") as f:
+    if os.path.exists(cls_meta_path):
+        with open(cls_meta_path, "r") as f:
             meta = json.load(f)
         feats = [str(f) for f in meta.get("features", [])]
-    return templates.TemplateResponse("classify.html", {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feats})
+    return templates.TemplateResponse(
+        "classify.html",
+        {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feats, "ticker": t},
+    )
 
 @router.post("/classify", response_class=HTMLResponse)
-def classify_submit(request: Request, values: str = Form(...)):
-    XGB_CLS_META_PATH = os.path.join(MODEL_REGISTRY, "xgb_classifier.json")
-    XGB_CLS_MODEL_PATH = os.path.join(MODEL_REGISTRY, "xgb_classifier.ubj")
-    if xgb is None or not (os.path.exists(XGB_CLS_META_PATH) and os.path.exists(XGB_CLS_MODEL_PATH)):
-        return templates.TemplateResponse("classify.html", {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": [], "result": None})
+def classify_submit(request: Request, values: str = Form(...), ticker: str | None = None):
+    t = _safe_ticker(ticker)
+    cls_model_path, cls_meta_path = xgb_classifier_paths(t)
+    if xgb is None or not (os.path.exists(cls_meta_path) and os.path.exists(cls_model_path)):
+        return templates.TemplateResponse(
+            "classify.html",
+            {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": [], "result": None, "ticker": t},
+        )
     booster = xgb.Booster()
-    booster.load_model(XGB_CLS_MODEL_PATH)
-    with open(XGB_CLS_META_PATH, "r") as f:
+    booster.load_model(cls_model_path)
+    with open(cls_meta_path, "r") as f:
         meta = json.load(f)
     feat_names = [str(f) for f in meta.get("features", [])]
     try:
         nums = [float(x.strip()) for x in values.split(",") if x.strip() != ""]
     except Exception:
-        return templates.TemplateResponse("classify.html", {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": None})
+        return templates.TemplateResponse(
+            "classify.html",
+            {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": None, "ticker": t},
+        )
     if len(nums) != len(feat_names):
-        return templates.TemplateResponse("classify.html", {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": None})
+        return templates.TemplateResponse(
+            "classify.html",
+            {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": None, "ticker": t},
+        )
     df = pd.DataFrame([nums], columns=[f.strip() for f in feat_names])
     dmatrix = xgb.DMatrix(df)
     proba = float(booster.predict(dmatrix)[0])
     result = {"proba_up": proba, "label": int(proba >= 0.5)}
-    return templates.TemplateResponse("classify.html", {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": result})
+    return templates.TemplateResponse(
+        "classify.html",
+        {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": result, "ticker": t},
+    )
 
 @router.get("/pca", response_class=HTMLResponse)
-def pca_page(request: Request):
+def pca_page(request: Request, ticker: str | None = None):
+    t = _safe_ticker(ticker)
+    meta_path, _ = pca_paths(t)
     meta = None
     error = None
-    if os.path.exists(PCA_META_PATH):
+    if os.path.exists(meta_path):
         try:
-            with open(PCA_META_PATH, "r") as f:
+            with open(meta_path, "r") as f:
                 meta = json.load(f)
         except Exception as e:
             error = f"Failed to load PCA metadata: {e}"
     else:
         error = "PCA metadata not found. Run the pipeline to generate it."
-    return templates.TemplateResponse("pca.html", {"request": request, "title": "PCA", "year": datetime.datetime.now().year, "pca": meta, "error": error})
+    return templates.TemplateResponse(
+        "pca.html",
+        {"request": request, "title": "PCA", "year": datetime.datetime.now().year, "pca": meta, "error": error, "ticker": t},
+    )
 
 @router.get("/cluster", response_class=HTMLResponse)
-def cluster_page(request: Request):
+def cluster_page(request: Request, ticker: str | None = None):
+    t = _safe_ticker(ticker)
+    meta_path, _ = cluster_paths(t)
     meta = None
     error = None
-    if os.path.exists(CLUSTERS_META_PATH):
+    if os.path.exists(meta_path):
         try:
-            with open(CLUSTERS_META_PATH, "r") as f:
+            with open(meta_path, "r") as f:
                 meta = json.load(f)
         except Exception as e:
             error = f"Failed to load cluster metadata: {e}"
     else:
         error = "Cluster metadata not found. Run the pipeline to generate it."
     features = meta.get("feature_order", []) if isinstance(meta, dict) else []
-    return templates.TemplateResponse("cluster.html", {"request": request, "title": "Clustering", "year": datetime.datetime.now().year, "clusters": meta, "features": features, "result": None, "error": error})
+    return templates.TemplateResponse(
+        "cluster.html",
+        {
+            "request": request,
+            "title": "Clustering",
+            "year": datetime.datetime.now().year,
+            "clusters": meta,
+            "features": features,
+            "result": None,
+            "error": error,
+            "ticker": t,
+        },
+    )
 
 @router.post("/cluster", response_class=HTMLResponse)
-def cluster_submit(request: Request, values: str = Form(...)):
+def cluster_submit(request: Request, values: str = Form(...), ticker: str | None = None):
+    t = _safe_ticker(ticker)
+    meta_path, _ = cluster_paths(t)
     meta = None
     error = None
-    if os.path.exists(CLUSTERS_META_PATH):
-        with open(CLUSTERS_META_PATH, "r") as f:
+    if os.path.exists(meta_path):
+        with open(meta_path, "r") as f:
             meta = json.load(f)
     else:
         error = "Cluster metadata not found. Run the pipeline to generate it."
@@ -202,11 +255,24 @@ def cluster_submit(request: Request, values: str = Form(...)):
             result = {"cluster": assigned, "distances": dists.tolist()}
         else:
             error = f"Expected {len(features)} features, got {len(nums)}"
-    return templates.TemplateResponse("cluster.html", {"request": request, "title": "Clustering", "year": datetime.datetime.now().year, "clusters": meta, "features": features, "result": result, "error": error})
+    return templates.TemplateResponse(
+        "cluster.html",
+        {
+            "request": request,
+            "title": "Clustering",
+            "year": datetime.datetime.now().year,
+            "clusters": meta,
+            "features": features,
+            "result": result,
+            "error": error,
+            "ticker": t,
+        },
+    )
 
 @router.get("/forecast-page", response_class=HTMLResponse)
-def forecast_page(request: Request):
-    FORECAST_META_PATH = os.path.join(MODEL_REGISTRY, "forecast.json")
+def forecast_page(request: Request, ticker: str | None = None):
+    t = _safe_ticker(ticker)
+    FORECAST_META_PATH = forecast_path(t)
     data = None
     error = None
     if os.path.exists(FORECAST_META_PATH):
@@ -217,33 +283,43 @@ def forecast_page(request: Request):
             error = f"Failed to load forecast: {e}"
     else:
         error = "No persisted forecast found. Run pipeline or submit a horizon to compute one."
-    return templates.TemplateResponse("forecast.html", {"request": request, "title": "Forecast", "year": datetime.datetime.now().year, "forecast": data, "error": error})
+    return templates.TemplateResponse(
+        "forecast.html",
+        {"request": request, "title": "Forecast", "year": datetime.datetime.now().year, "forecast": data, "error": error, "ticker": t},
+    )
 
 @router.post("/forecast-page", response_class=HTMLResponse)
-def forecast_page_submit(request: Request, horizon: int = Form(7)):
+def forecast_page_submit(request: Request, horizon: int = Form(7), ticker: str | None = None):
+    t = _safe_ticker(ticker)
     error = None
     result = None
     if ARIMA is None:
         error = "statsmodels not installed on server; cannot compute on-demand forecast."
     else:
-        feature_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", "AAPL.parquet")
+        feature_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
         if not os.path.exists(feature_path):
-            error = "Features file missing (AAPL.parquet). Run pipeline first."
+            error = f"Features file missing ({t}.parquet). Run pipeline first."
         else:
             try:
                 df = pd.read_parquet(feature_path).sort_values("date")
                 if "Close" not in df.columns:
                     error = "Close column missing in features."
                 else:
-                    series = df["Close"].astype(float)
+                    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+                    df = df.dropna(subset=["date"])
+                    series = df.set_index("date")["Close"].astype(float).sort_index()
+                    freq = pd.infer_freq(series.index)
+                    if freq is None:
+                        freq = "D"
+                    series = series.asfreq(freq).ffill()
                     order = (1, 1, 1)
                     model = ARIMA(series, order=order)
                     fitted = model.fit()
                     fc_vals = fitted.forecast(steps=horizon)
                     conf_res = fitted.get_forecast(steps=horizon)
                     conf = conf_res.conf_int().values.tolist()
-                    last_date = pd.to_datetime(df["date"].iloc[-1])
-                    idx = pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq="D")
+                    last_date = series.index[-1]
+                    idx = pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq=freq or "D")
                     result = {
                         "horizon": int(horizon),
                         "order": list(order),
@@ -257,24 +333,37 @@ def forecast_page_submit(request: Request, horizon: int = Form(7)):
             except Exception as e:
                 error = f"Forecast error: {e}"
     persisted = None
-    FORECAST_META_PATH = os.path.join(MODEL_REGISTRY, "forecast.json")
+    FORECAST_META_PATH = forecast_path(t)
     if os.path.exists(FORECAST_META_PATH):
         try:
             with open(FORECAST_META_PATH, "r") as f:
                 persisted = json.load(f)
         except Exception:
             pass
-    return templates.TemplateResponse("forecast.html", {"request": request, "title": "Forecast", "year": datetime.datetime.now().year, "forecast": persisted, "computed": result, "error": error})
+    return templates.TemplateResponse(
+        "forecast.html",
+        {
+            "request": request,
+            "title": "Forecast",
+            "year": datetime.datetime.now().year,
+            "forecast": persisted,
+            "computed": result,
+            "error": error,
+            "ticker": t,
+        },
+    )
 
 @router.get("/recommend-page", response_class=HTMLResponse)
-def recommend_page(request: Request):
+def recommend_page(request: Request, ticker: str | None = None):
+    t = _safe_ticker(ticker)
+    pca_meta_path, _ = pca_paths(t)
     pca_meta = None
     dates = []
     features = []
     error = None
-    if os.path.exists(PCA_META_PATH):
+    if os.path.exists(pca_meta_path):
         try:
-            with open(PCA_META_PATH, "r") as f:
+            with open(pca_meta_path, "r") as f:
                 pca_meta = json.load(f)
             dates = pca_meta.get("row_index", [])[-30:]
             features = pca_meta.get("feature_order", [])
@@ -282,28 +371,49 @@ def recommend_page(request: Request):
             error = f"Failed to load PCA metadata: {e}"
     else:
         error = "PCA artifacts not found. Run the pipeline to generate them."
-    return templates.TemplateResponse("recommend.html", {"request": request, "title": "Recommend", "year": datetime.datetime.now().year, "dates": dates, "features": features, "neighbors": None, "error": error})
+    return templates.TemplateResponse(
+        "recommend.html",
+        {
+            "request": request,
+            "title": "Recommend",
+            "year": datetime.datetime.now().year,
+            "dates": dates,
+            "features": features,
+            "neighbors": None,
+            "error": error,
+            "ticker": t,
+        },
+    )
 
 @router.post("/recommend-page", response_class=HTMLResponse)
-def recommend_page_submit(request: Request, mode: str = Form("date"), date: str | None = Form(None), k: int = Form(5), values: str | None = Form(None)):
+def recommend_page_submit(
+    request: Request,
+    mode: str = Form("date"),
+    date: str | None = Form(None),
+    k: int = Form(5),
+    values: str | None = Form(None),
+    ticker: str | None = None,
+):
+    t = _safe_ticker(ticker)
+    pca_meta_path, pca_trans_path = pca_paths(t)
     pca_meta = None
     error = None
     dates = []
     features = []
     neighbors = None
-    if not os.path.exists(PCA_META_PATH):
+    if not os.path.exists(pca_meta_path):
         error = "PCA metadata not found. Run pipeline first."
     else:
-        with open(PCA_META_PATH, "r") as f:
+        with open(pca_meta_path, "r") as f:
             pca_meta = json.load(f)
         features = pca_meta.get("feature_order", [])
         all_dates = pca_meta.get("row_index", [])
         dates = all_dates[-30:]
-        trans_path = os.path.join(MODEL_REGISTRY, "pca_transformed.npy")
+        trans_path = pca_trans_path
         if not os.path.exists(trans_path):
             error = "PCA transformed matrix missing. Run pipeline."
     if error is None and pca_meta is not None:
-        comps = np.load(os.path.join(MODEL_REGISTRY, "pca_transformed.npy"))
+        comps = np.load(pca_trans_path)
         row_index = pca_meta.get("row_index", [])
         if mode == "vector" and values:
             try:
@@ -336,18 +446,33 @@ def recommend_page_submit(request: Request, mode: str = Form("date"), date: str 
                 dists = np.linalg.norm(comps - target, axis=1)
                 dists[idx] = np.inf
                 nn_idx = np.argsort(dists)[:k]
-                feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", "AAPL.parquet")
+                feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
                 closes = {}
                 if os.path.exists(feat_path):
                     fdf = pd.read_parquet(feat_path)
                     fdf["date"] = pd.to_datetime(fdf["date"]).dt.strftime("%Y-%m-%d")
                     closes = dict(zip(fdf["date"], fdf.get("Close", pd.Series([None]*len(fdf)))))
                 neighbors = [{"date": row_index[i], "distance": float(dists[i]), "close": (None if closes == {} else float(closes.get(row_index[i])) if closes.get(row_index[i]) is not None else None)} for i in nn_idx]
-    return templates.TemplateResponse("recommend.html", {"request": request, "title": "Recommend", "year": datetime.datetime.now().year, "dates": dates, "features": features, "neighbors": neighbors, "error": error, "selected_date": date, "mode": mode})
+    return templates.TemplateResponse(
+        "recommend.html",
+        {
+            "request": request,
+            "title": "Recommend",
+            "year": datetime.datetime.now().year,
+            "dates": dates,
+            "features": features,
+            "neighbors": neighbors,
+            "error": error,
+            "selected_date": date,
+            "mode": mode,
+            "ticker": t,
+        },
+    )
 
 @router.get("/association-page", response_class=HTMLResponse)
-def association_page(request: Request):
-    path = os.path.join(MODEL_REGISTRY, "association.json")
+def association_page(request: Request, ticker: str | None = None):
+    t = _safe_ticker(ticker)
+    path = association_path(t)
     data = None
     error = None
     if os.path.exists(path):
@@ -360,5 +485,5 @@ def association_page(request: Request):
         error = "No association rules found. Run the association flow to generate them."
     return templates.TemplateResponse(
         "association.html",
-        {"request": request, "title": "Association", "year": datetime.datetime.now().year, "assoc": data, "error": error},
+        {"request": request, "title": "Association", "year": datetime.datetime.now().year, "assoc": data, "error": error, "ticker": t},
     )

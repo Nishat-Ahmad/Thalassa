@@ -2,35 +2,38 @@ import os, json
 import numpy as np
 import pandas as pd
 from fastapi import HTTPException
-from ..core import XGB_MODEL_PATH, XGB_META_PATH, XGB_CLS_MODEL_PATH, XGB_CLS_META_PATH
+from ..core import xgb_paths, xgb_classifier_paths
 
 try:
     import xgboost as xgb
 except Exception:
     xgb = None
 
-def load_xgb():
+def load_xgb(ticker: str | None = None):
     if xgb is None:
         return None, None
-    if not (os.path.exists(XGB_MODEL_PATH) and os.path.exists(XGB_META_PATH)):
+    model_path, meta_path = xgb_paths(ticker)
+    if not (os.path.exists(model_path) and os.path.exists(meta_path)):
         return None, None
     booster = xgb.Booster()
-    booster.load_model(XGB_MODEL_PATH)
-    with open(XGB_META_PATH, "r") as f:
+    booster.load_model(model_path)
+    with open(meta_path, "r") as f:
         meta = json.load(f)
     raw_feats = meta.get("features", [])
     meta_feats = [f[0] if isinstance(f, (list, tuple)) else f for f in raw_feats]
     booster_feats = booster.feature_names or meta_feats
     return booster, booster_feats
 
-def load_xgb_classifier():
+
+def load_xgb_classifier(ticker: str | None = None):
     if xgb is None:
         return None, None
-    if not (os.path.exists(XGB_CLS_MODEL_PATH) and os.path.exists(XGB_CLS_META_PATH)):
+    model_path, meta_path = xgb_classifier_paths(ticker)
+    if not (os.path.exists(model_path) and os.path.exists(meta_path)):
         return None, None
     booster = xgb.Booster()
-    booster.load_model(XGB_CLS_MODEL_PATH)
-    with open(XGB_CLS_META_PATH, "r") as f:
+    booster.load_model(model_path)
+    with open(meta_path, "r") as f:
         meta = json.load(f)
     feats = [str(f) for f in meta.get("features", [])]
     booster_feats = booster.feature_names or feats

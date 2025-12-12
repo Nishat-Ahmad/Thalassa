@@ -5,13 +5,13 @@ def test_registry_files_exist():
     REGISTRY = 'ml/registry'  # Assuming REGISTRY is defined like this
     assert os.path.exists(REGISTRY)
     # xgb regressor optional
-    xgb_meta = os.path.join(REGISTRY, "xgb_model.json")
+    xgb_meta = os.path.join(REGISTRY, "xgb_model_AAPL.json")
     if os.path.exists(xgb_meta):
         with open(xgb_meta, "r") as f:
             meta = json.load(f)
         assert "metrics" in meta
     # xgb classifier optional
-    xgb_cls = os.path.join(REGISTRY, "xgb_classifier.json")
+    xgb_cls = os.path.join(REGISTRY, "xgb_classifier_AAPL.json")
     if os.path.exists(xgb_cls):
         with open(xgb_cls, "r") as f:
             meta = json.load(f)
@@ -30,8 +30,8 @@ import os, json
 import pandas as pd
 
 def test_model_registry_exists():
-    meta_path = os.path.join('ml','registry','xgb_model.json')
-    assert os.path.exists(meta_path), 'xgb_model.json not found; run flows/flow.py to train.'
+    meta_path = os.path.join('ml','registry','xgb_model_AAPL.json')
+    assert os.path.exists(meta_path), 'xgb_model_AAPL.json not found; run flows/flow.py to train.'
     with open(meta_path, 'r') as f:
         meta = json.load(f)
     assert 'metrics' in meta and 'rmse' in meta['metrics']

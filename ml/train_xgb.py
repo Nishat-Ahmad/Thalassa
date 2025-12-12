@@ -1,4 +1,4 @@
-import os, json
+import os, json, argparse
 import numpy as np
 import pandas as pd
 from datetime import datetime, UTC
@@ -9,12 +9,16 @@ try:
 except ImportError:
     raise SystemExit("xgboost not installed. Run: pip install xgboost")
 
+parser = argparse.ArgumentParser(description="Train XGB regressor")
+parser.add_argument("--ticker", default="AAPL", help="Ticker symbol to train on")
+args = parser.parse_args()
+
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 FEATURE_DIR = os.path.join(os.path.dirname(__file__), "features")
 REGISTRY_DIR = os.path.join(os.path.dirname(__file__), "registry")
 os.makedirs(REGISTRY_DIR, exist_ok=True)
 
-FEATURE_FILE = os.path.join(FEATURE_DIR, "AAPL.parquet")
+FEATURE_FILE = os.path.join(FEATURE_DIR, f"{args.ticker.upper()}.parquet")
 if not os.path.exists(FEATURE_FILE):
     raise SystemExit(f"Feature file not found: {FEATURE_FILE}. Run flows/flow.py first.")
 
@@ -49,14 +53,16 @@ pred = model.predict(X_test)
 rmse = float(np.sqrt(mean_squared_error(y_test, pred)))
 mae = float(mean_absolute_error(y_test, pred))
 
-artifact_path = os.path.join(REGISTRY_DIR, "xgb_model.json")
-model.save_model(os.path.join(REGISTRY_DIR, "xgb_model.ubj"))
+ticker = args.ticker.upper()
+artifact_path = os.path.join(REGISTRY_DIR, f"xgb_model_{ticker}.json")
+model.save_model(os.path.join(REGISTRY_DIR, f"xgb_model_{ticker}.ubj"))
 meta = {
     "name": "xgb-regressor",
     "created_at": datetime.now(UTC).isoformat(),
     "features": list(X.columns),
     "metrics": {"rmse": rmse, "mae": mae},
-    "artifact": "xgb_model.ubj",
+    "artifact": f"xgb_model_{ticker}.ubj",
+    "ticker": ticker,
 }
 with open(artifact_path, "w") as f:
     json.dump(meta, f)

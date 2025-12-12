@@ -39,7 +39,8 @@
 <div class="cards">
   <div class="card">
     <h3>{{ ticker_info.symbol }}</h3>
-    <p class="muted">Currency: {{ ticker_info.currency or '-' }}</p>
+    <p class="muted"><strong>Name:</strong> {{ ticker_info.name or '-' }}</p>
+    <p class="muted"><strong>Currency:</strong> {{ ticker_info.currency or '-' }}</p>
     <p><strong>Last:</strong> {{ ticker_info.last_price or '-' }}</p>
     <p><strong>Prev Close:</strong> {{ ticker_info.previous_close or '-' }}</p>
   </div>
@@ -52,8 +53,8 @@
     <h3>Next Steps</h3>
     <p class="muted">Use this ticker in ML tasks.</p>
     <div class="form-actions" style="gap:8px;flex-wrap:wrap;">
-      <a class="btn" href="/tasks">Open ML Tasks</a>
-      <a class="btn btn-outline" href="/model-info">Model Info</a>
+      <a class="btn" href="/tasks?ticker={{ ticker_info.symbol }}">Open ML Tasks</a>
+      <a class="btn btn-outline" href="/model-info?ticker={{ ticker_info.symbol }}">Model Info</a>
     </div>
   </div>
 </div>

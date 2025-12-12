@@ -3,7 +3,10 @@
 <section class="section-header">
   <h1>Single Classification</h1>
   <p class="muted">Enter comma-separated feature values matching the trained classifier's expected features.</p>
-  <div class="toolbar"><a class="btn" href="/tasks">← Back to ML Tasks</a></div>
+  <div class="toolbar">
+    <a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">← Back to ML Tasks</a>
+    <span class="muted">Ticker: <strong>{{ ticker or 'AAPL' }}</strong></span>
+  </div>
 </section>
 
 <section class="panel">
@@ -16,6 +19,7 @@
 </section>
 
 <form action="/classify" method="post" class="form">
+  <input type="hidden" name="ticker" value="{{ ticker or '' }}" />
   <div class="form-control">
     <label for="values">Feature Values (comma-separated)</label>
     <input id="values" type="text" name="values" placeholder="e.g. 0.1, 0.2, 0.3, ..." required />
@@ -23,7 +27,7 @@
   </div>
   <div class="form-actions">
     <button class="btn btn-primary" type="submit">Classify</button>
-    <a class="btn btn-outline" href="/expected-features-class" target="_blank">Open features JSON</a>
+    <a class="btn btn-outline" href="/expected-features-class{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Open features JSON</a>
   </div>
 </form>
 

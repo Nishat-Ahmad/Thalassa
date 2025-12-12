@@ -3,7 +3,10 @@
 <section class="section-header">
   <h1>Clustering</h1>
   <p class="muted">View cluster summary and assign a cluster for a new feature vector.</p>
-  <div class="toolbar"><a class="btn" href="/tasks">← Back to ML Tasks</a></div>
+  <div class="toolbar">
+    <a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">← Back to ML Tasks</a>
+    <span class="muted">Ticker: <strong>{{ ticker or 'AAPL' }}</strong></span>
+  </div>
   {% if error %}
     <p class="alert">{{ error }}</p>
   {% endif %}
@@ -21,7 +24,7 @@
       <code style="display:block;white-space:pre-wrap">{{ clusters.label_counts }}</code>
     {% endif %}
     <div class="form-actions" style="margin-top:8px">
-      <a class="btn btn-outline" href="/cluster-info" target="_blank">Open cluster JSON</a>
+      <a class="btn btn-outline" href="/cluster-info{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Open cluster JSON</a>
     </div>
   </div>
   <div class="panel">
@@ -36,6 +39,7 @@
 </div>
 
 <form action="/cluster" method="post" class="form">
+  <input type="hidden" name="ticker" value="{{ ticker or '' }}" />
   <div class="form-control">
     <label for="values">Feature Values (comma-separated)</label>
     <input id="values" type="text" name="values" placeholder="Provide {{ features|length }} values in the exact order" required />

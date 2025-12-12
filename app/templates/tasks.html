@@ -3,8 +3,13 @@
 <section class="section-header">
   <h1>ML Tasks</h1>
   <p class="muted">Central hub for all machine learning features. Pick a task below.</p>
-  <div class="toolbar">
-    <a class="btn" href="/model-info" target="_blank">Model Info</a>
+  <div class="toolbar" style="gap:8px;flex-wrap:wrap;">
+    <a class="btn" href="/model-info{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Model Info</a>
+    <form method="post" action="/run-pipeline" style="display:flex;gap:8px;align-items:center;">
+      <input type="hidden" name="ticker" value="{{ ticker or 'AAPL' }}">
+      <button class="btn btn-primary" type="submit">Run Pipeline for {{ ticker or 'AAPL' }}</button>
+    </form>
+    <span class="muted">Ticker: <strong>{{ ticker or 'AAPL' }}</strong></span>
   </div>
   </section>
 
@@ -12,17 +17,17 @@
   <article class="card">
     <h3>Dimensionality Reduction (PCA)</h3>
     <p>Explore explained variance, components, and feature order.</p>
-    <div class="form-actions"><a class="btn btn-primary" href="/pca">Open</a></div>
+    <div class="form-actions"><a class="btn btn-primary" href="/pca{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
   </article>
   <article class="card">
     <h3>Clustering</h3>
     <p>View cluster summary and assign cluster for new vectors.</p>
-    <div class="form-actions"><a class="btn btn-primary" href="/cluster">Open</a></div>
+    <div class="form-actions"><a class="btn btn-primary" href="/cluster{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
   </article>
   <article class="card">
     <h3>Single Classification</h3>
     <p>Enter features to get up/down probability from classifier.</p>
-    <div class="form-actions"><a class="btn btn-primary" href="/classify">Open</a></div>
+    <div class="form-actions"><a class="btn btn-primary" href="/classify{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
   </article>
   <article class="card">
     <h3>Batch Predict</h3>
@@ -32,17 +37,17 @@
   <article class="card">
     <h3>Forecast</h3>
     <p>View persisted ARIMA forecast or compute on-demand.</p>
-    <div class="form-actions"><a class="btn btn-primary" href="/forecast-page">Open</a></div>
+    <div class="form-actions"><a class="btn btn-primary" href="/forecast-page{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
   </article>
   <article class="card">
     <h3>Recommend</h3>
     <p>Find nearest neighbors in PCA space by date or vector.</p>
-    <div class="form-actions"><a class="btn btn-primary" href="/recommend-page">Open</a></div>
+    <div class="form-actions"><a class="btn btn-primary" href="/recommend-page{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
   </article>
   <article class="card">
     <h3>Association</h3>
     <p>Frequent itemsets and association rules from engineered signals.</p>
-    <div class="form-actions"><a class="btn btn-primary" href="/association-page">Open</a></div>
+    <div class="form-actions"><a class="btn btn-primary" href="/association-page{% if ticker %}?ticker={{ ticker }}{% endif %}">Open</a></div>
   </article>
 </section>
 {% endblock %}

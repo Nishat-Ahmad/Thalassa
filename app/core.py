@@ -6,12 +6,47 @@ TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 MODEL_REGISTRY = os.path.join(BASE_DIR, "..", "ml", "registry")
-XGB_META_PATH = os.path.join(MODEL_REGISTRY, "xgb_model.json")
-XGB_MODEL_PATH = os.path.join(MODEL_REGISTRY, "xgb_model.ubj")
-XGB_CLS_META_PATH = os.path.join(MODEL_REGISTRY, "xgb_classifier.json")
-XGB_CLS_MODEL_PATH = os.path.join(MODEL_REGISTRY, "xgb_classifier.ubj")
-PCA_META_PATH = os.path.join(MODEL_REGISTRY, "pca.json")
-CLUSTERS_META_PATH = os.path.join(MODEL_REGISTRY, "clusters.json")
-FORECAST_META_PATH = os.path.join(MODEL_REGISTRY, "forecast.json")
+
+
+def _safe_ticker(ticker: str | None) -> str:
+	return (ticker or "AAPL").upper()
+
+
+def xgb_paths(ticker: str | None = None) -> tuple[str, str]:
+	t = _safe_ticker(ticker)
+	model = os.path.join(MODEL_REGISTRY, f"xgb_model_{t}.ubj")
+	meta = os.path.join(MODEL_REGISTRY, f"xgb_model_{t}.json")
+	return model, meta
+
+
+def xgb_classifier_paths(ticker: str | None = None) -> tuple[str, str]:
+	t = _safe_ticker(ticker)
+	model = os.path.join(MODEL_REGISTRY, f"xgb_classifier_{t}.ubj")
+	meta = os.path.join(MODEL_REGISTRY, f"xgb_classifier_{t}.json")
+	return model, meta
+
+
+def pca_paths(ticker: str | None = None) -> tuple[str, str]:
+	t = _safe_ticker(ticker)
+	meta = os.path.join(MODEL_REGISTRY, f"pca_{t}.json")
+	transformed = os.path.join(MODEL_REGISTRY, f"pca_transformed_{t}.npy")
+	return meta, transformed
+
+
+def cluster_paths(ticker: str | None = None) -> tuple[str, str]:
+	t = _safe_ticker(ticker)
+	meta = os.path.join(MODEL_REGISTRY, f"clusters_{t}.json")
+	labels = os.path.join(MODEL_REGISTRY, f"cluster_labels_{t}.npy")
+	return meta, labels
+
+
+def forecast_path(ticker: str | None = None) -> str:
+	t = _safe_ticker(ticker)
+	return os.path.join(MODEL_REGISTRY, f"forecast_{t}.json")
+
+
+def association_path(ticker: str | None = None) -> str:
+	t = _safe_ticker(ticker)
+	return os.path.join(MODEL_REGISTRY, f"association_{t}.json")
 
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
