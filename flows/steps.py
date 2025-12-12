@@ -136,6 +136,41 @@ def train_classification(feature_path: str, run_dir: str | None = None):
     return result
 
 @task
+def train_association_rules(
+    feature_path: str,
+    run_dir: str | None = None,
+    min_support: float = 0.1,
+    min_confidence: float = 0.6,
+    max_rules: int = 100,
+):
+    ticker = _ticker_from_path(feature_path)
+    script = os.path.join(os.path.dirname(__file__), "..", "ml", "train_association.py")
+    target_dir = run_dir or os.path.join(REGISTRY_DIR, ticker)
+    cmd = [
+        "python",
+        script,
+        "--features",
+        feature_path,
+        "--registry",
+        target_dir,
+        "--min-support",
+        str(min_support),
+        "--min-confidence",
+        str(min_confidence),
+        "--max-rules",
+        str(max_rules),
+    ]
+    process = Popen(cmd, stdout=PIPE, stderr=PIPE)
+    stdout, stderr = process.communicate()
+    if process.returncode != 0:
+        raise RuntimeError(f"Association training failed: {stderr.decode()}")
+    try:
+        result = json.loads(stdout.decode())
+    except Exception:
+        result = {"status": "success"}
+    return result
+
+@task
 def compute_pca(feature_path: str, n_components: int = 5, run_dir: str | None = None):
     if PCA is None:
         return {"status": "skipped", "reason": "sklearn not available"}
