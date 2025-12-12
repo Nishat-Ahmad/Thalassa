@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import os, json, numpy as np, datetime
 import pandas as pd
 from ..core import (
-    MODEL_PATH, XGB_META_PATH, XGB_CLS_META_PATH, PCA_META_PATH, CLUSTERS_META_PATH,
+    XGB_META_PATH, XGB_MODEL_PATH, XGB_CLS_META_PATH, PCA_META_PATH, CLUSTERS_META_PATH,
     MODEL_REGISTRY, FORECAST_META_PATH, templates
 )
 from ..services.models import load_xgb, load_xgb_classifier, align_to_booster_features
@@ -67,7 +67,7 @@ def _collect_artifacts():
     cluster_meta = _load_json(CLUSTERS_META_PATH)
     forecast_meta = _load_json(FORECAST_META_PATH)
 
-    add("XGB Regressor", MODEL_PATH, lambda: f"file size {round(os.path.getsize(MODEL_PATH)/1024,1)} KB")
+    add("XGB Regressor", XGB_MODEL_PATH, lambda: f"file size {round(os.path.getsize(XGB_MODEL_PATH)/1024,1)} KB")
     add("XGB Regressor Meta", XGB_META_PATH, lambda: f"{len(xgb_meta.get('features', [])) if xgb_meta else 0} features")
     add("Classifier Meta", XGB_CLS_META_PATH, lambda: f"{len(xgb_cls_meta.get('features', [])) if xgb_cls_meta else 0} features")
     add("PCA Metadata", PCA_META_PATH, lambda: f"{len(pca_meta.get('feature_order', [])) if pca_meta else 0} feature dims")
@@ -111,9 +111,7 @@ def model_info(request: Request):
     forecast_meta = _load_json(FORECAST_META_PATH)
     artifacts = _collect_artifacts()
 
-    legacy_meta: dict = {"status": "no-model"}
-    if os.path.exists(MODEL_PATH):
-        legacy_meta = _load_json(MODEL_PATH) or {"status": "unknown"}
+    legacy_meta: dict = {}
     if xgb_meta:
         legacy_meta["xgb"] = xgb_meta
     if xgb_cls_meta:
@@ -207,24 +205,14 @@ def predict_cluster(req: PredictRequest):
 @router.post("/predict")
 def predict(req: PredictRequest):
     booster, feat_names = load_xgb()
-    if booster is not None and feat_names:
-        if len(req.features) != len(feat_names):
-            raise HTTPException(status_code=400, detail=f"Expected {len(feat_names)} features, got {len(req.features)}")
-        df = pd.DataFrame([req.features], columns=[f.strip() for f in feat_names])
-        dmatrix = xgb.DMatrix(df)
-        pred = float(booster.predict(dmatrix)[0])
-        return {"model": "xgb", "prediction": pred}
-    if os.path.exists(MODEL_PATH):
-        with open(MODEL_PATH, "r") as f:
-            meta = json.load(f)
-        weights = np.array(meta.get("weights", []), dtype=float)
-        if len(weights) != len(req.features):
-            weights = np.ones(len(req.features), dtype=float)
-    else:
-        weights = np.ones(len(req.features), dtype=float)
-    x = np.array(req.features, dtype=float)
-    y = float(np.dot(x, weights))
-    return {"model": "baseline", "prediction": y}
+    if booster is None or not feat_names:
+        raise HTTPException(status_code=400, detail="XGB model not available. Train it first.")
+    if len(req.features) != len(feat_names):
+        raise HTTPException(status_code=400, detail=f"Expected {len(feat_names)} features, got {len(req.features)}")
+    df = pd.DataFrame([req.features], columns=[f.strip() for f in feat_names])
+    dmatrix = xgb.DMatrix(df)
+    pred = float(booster.predict(dmatrix)[0])
+    return {"model": "xgb", "prediction": pred}
 
 @router.post("/predict-class")
 def predict_class(req: PredictRequest):

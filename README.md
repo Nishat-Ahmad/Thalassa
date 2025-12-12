@@ -17,7 +17,6 @@ Website skeleton + baseline API + initial Prefect pipeline (ingestion, indicator
 ```bash
 uvicorn app.main:app --reload --app-dir d:\Code\Finance
 python flows/flow.py  # run ETL + baseline train
-python ml/train_baseline.py  # standalone demo
 ```
 
 ## Next Steps

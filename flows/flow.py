@@ -84,22 +84,9 @@ def train(feature_path: str):
     X = X.loc[mask]
     y = y.loc[mask]
 
-    # Baseline weights for fallback
-    weights = np.ones(X.shape[1]) / X.shape[1]
-    base_meta = {
-        "name": "prefect-feature-baseline",
-        "created_at": datetime.now(UTC).isoformat(),
-        "feature_count": int(X.shape[1]),
-        "weights": weights.tolist(),
-        "features": feature_cols,
-        "notes": "Placeholder baseline; XGBoost may overwrite"
-    }
-    with open(os.path.join(REGISTRY_DIR, "baseline_model.json"), "w") as f:
-        json.dump(base_meta, f)
-
-    # Train XGBoost if available
+    # Train XGBoost; require dependency
     if xgb is None:
-        return os.path.join(REGISTRY_DIR, "baseline_model.json")
+        raise RuntimeError("xgboost not installed; cannot train regressor")
 
     split = int(0.8 * len(X))
     X_train, X_test = X.iloc[:split], X.iloc[split:]

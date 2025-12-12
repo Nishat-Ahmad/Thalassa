@@ -4,7 +4,6 @@ import pandas as pd
 def test_registry_files_exist():
     REGISTRY = 'ml/registry'  # Assuming REGISTRY is defined like this
     assert os.path.exists(REGISTRY)
-    assert os.path.exists(os.path.join(REGISTRY, "baseline_model.json"))
     # xgb regressor optional
     xgb_meta = os.path.join(REGISTRY, "xgb_model.json")
     if os.path.exists(xgb_meta):
