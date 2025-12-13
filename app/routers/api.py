@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Request, Form
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-import os, json, numpy as np, datetime
+import os, json, numpy as np, datetime, math
 import sys
 from pathlib import Path
 import pandas as pd
@@ -16,6 +16,7 @@ from ..core import (
     association_path,
 )
 from ..services.models import load_xgb, load_xgb_classifier, align_to_booster_features
+import hashlib
 
 try:
     import xgboost as xgb
@@ -91,41 +92,233 @@ def _load_json(path: str):
         return None
 
 
-def _collect_artifacts(ticker: str | None = None):
+def _sanitize_for_json(obj):
+    """Recursively replace non-finite floats (inf, -inf, nan) with None so JSON serialization succeeds."""
+    # primitives
+    if obj is None:
+        return None
+    if isinstance(obj, (str, bool, int)):
+        return obj
+    if isinstance(obj, float) or (hasattr(obj, 'dtype') and np.issubdtype(getattr(obj, 'dtype'), np.floating)):
+        try:
+            val = float(obj)
+            return val if math.isfinite(val) else None
+        except Exception:
+            return None
+    # numpy scalar types
+    if isinstance(obj, (np.integer, np.floating)):
+        try:
+            val = obj.item()
+            return val if (not isinstance(val, float) or math.isfinite(val)) else None
+        except Exception:
+            return None
+    # dict or list/tuple
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    # fallback: try to convert to basic types
+    try:
+        return str(obj)
+    except Exception:
+        return None
+
+
+def _collect_artifacts(ticker: str | None = None, run_dir: str | None = None):
     items = []
 
-    xgb_model_path, xgb_meta_path = xgb_paths(ticker)
-    xgb_cls_model_path, xgb_cls_meta_path = xgb_classifier_paths(ticker)
-    pca_meta_path, pca_transformed_path = pca_paths(ticker)
-    clusters_meta_path, _ = cluster_paths(ticker)
-    forecast_meta_path = forecast_path(ticker)
+    # determine candidate run directory
+    t = _safe_ticker(ticker)
+    # ensure we have xgb paths available for extras even when run_dir is supplied
+    xgb_model_path, xgb_meta_path = xgb_paths(t, run_dir=run_dir)
+    if run_dir:
+        candidate_dir = run_dir
+    else:
+        # try to find a run dir by seeing where xgb meta would live
+        xgb_model_path, xgb_meta_path = xgb_paths(t)
+        candidate_dir = os.path.dirname(xgb_meta_path) if xgb_meta_path else MODEL_REGISTRY
+        if not os.path.isdir(candidate_dir) or (candidate_dir == MODEL_REGISTRY and not os.listdir(candidate_dir)):
+            candidate_dir = MODEL_REGISTRY
 
-    def add(name: str, path: str, extractor=None):
+        # if ticker subdir exists, prefer latest timestamped run directory
+        ticker_base = os.path.join(MODEL_REGISTRY, t)
+        if os.path.isdir(ticker_base):
+            runs = [d for d in os.listdir(ticker_base) if os.path.isdir(os.path.join(ticker_base, d))]
+            if runs:
+                latest = sorted(runs)[-1]
+                candidate_dir = os.path.join(ticker_base, latest)
+
+    # walk candidate directory and detect artifacts
+    try:
+        files = sorted(os.listdir(candidate_dir))
+    except Exception:
+        files = []
+
+    def _human_size(n: int) -> str:
+        for unit in ['B','KB','MB','GB','TB']:
+            if n < 1024.0:
+                return f"{n:3.1f} {unit}"
+            n /= 1024.0
+        return f"{n:.1f}PB"
+
+    for fn in files:
+        path = os.path.join(candidate_dir, fn)
+        entry = {"name": fn, "path": path, "status": "missing", "detail": None, "kind": None}
         if os.path.exists(path):
-            detail = None
-            if extractor:
+            entry["status"] = "ready"
+            entry["kind"] = os.path.splitext(fn)[1].lstrip('.').lower()
+            try:
+                sz = os.path.getsize(path)
+                entry["size_bytes"] = sz
+                entry["size_human"] = _human_size(sz)
+                entry["detail"] = entry.get("detail") or entry["size_human"]
                 try:
-                    detail = extractor()
+                    entry_stat = os.stat(path)
+                    entry["mtime"] = datetime.datetime.fromtimestamp(entry_stat.st_mtime).isoformat()
                 except Exception:
-                    detail = None
-            items.append({"name": name, "status": "ready", "detail": detail})
-        else:
-            items.append({"name": name, "status": "missing", "detail": None})
+                    entry["mtime"] = None
+            except Exception:
+                entry["detail"] = None
 
-    xgb_meta = _load_json(xgb_meta_path)
-    xgb_cls_meta = _load_json(xgb_cls_meta_path)
-    pca_meta = _load_json(pca_meta_path)
-    cluster_meta = _load_json(clusters_meta_path)
-    forecast_meta = _load_json(forecast_meta_path)
+            # JSON metadata: try to load and extract lightweight summary
+            if fn.endswith('.json'):
+                try:
+                    j = _load_json(path)
+                    if isinstance(j, dict):
+                        # add common summary keys
+                        if 'features' in j:
+                            entry['detail'] = f"{len(j.get('features', []))} features"
+                        elif 'feature_order' in j:
+                            entry['detail'] = f"{len(j.get('feature_order', []))} feature dims"
+                        elif 'centers' in j:
+                            entry['detail'] = f"{len(j.get('centers', []))} centers"
+                        elif 'generated_at' in j:
+                            entry['detail'] = f"generated {j.get('generated_at')}"
+                        else:
+                            # fallback to listing top-level keys
+                            entry['detail'] = 'keys: ' + ','.join(list(j.keys())[:5])
+                    else:
+                        entry['detail'] = 'json'
+                except Exception:
+                    entry['detail'] = 'json (invalid)'
 
-    add("XGB Regressor", xgb_model_path, lambda: f"file size {round(os.path.getsize(xgb_model_path)/1024,1)} KB")
-    add("XGB Regressor Meta", xgb_meta_path, lambda: f"{len(xgb_meta.get('features', [])) if xgb_meta else 0} features")
-    add("Classifier Meta", xgb_cls_meta_path, lambda: f"{len(xgb_cls_meta.get('features', [])) if xgb_cls_meta else 0} features")
-    add("PCA Metadata", pca_meta_path, lambda: f"{len(pca_meta.get('feature_order', [])) if pca_meta else 0} feature dims")
-    add("Cluster Metadata", clusters_meta_path, lambda: f"{len(cluster_meta.get('centers', [])) if cluster_meta else 0} centers")
-    add("Forecast", forecast_meta_path, lambda: f"generated {forecast_meta.get('generated_at', 'unknown') if forecast_meta else 'unknown'}")
+            # numpy arrays: report shape when possible
+            if fn.endswith('.npy'):
+                try:
+                    # load in mmap mode to avoid memory pressure
+                    arr = np.load(path, mmap_mode='r')
+                    entry['npy_shape'] = getattr(arr, 'shape', None)
+                    entry['npy_dtype'] = str(getattr(arr, 'dtype', None))
+                    entry['detail'] = f"shape {entry['npy_shape']} dtype {entry['npy_dtype']}"
+                    # small summary: min/max on first axis sample if large
+                    try:
+                        if getattr(arr, 'size', 0) and arr.size <= 2000000:
+                            a = np.array(arr)
+                            entry['npy_min'] = float(a.min()) if a.size else None
+                            entry['npy_max'] = float(a.max()) if a.size else None
+                        else:
+                            # sample first 100 rows/elements if possible
+                            s = arr.flat[:100]
+                            entry['npy_sample_min'] = float(min(s)) if hasattr(s, '__iter__') else None
+                            entry['npy_sample_max'] = float(max(s)) if hasattr(s, '__iter__') else None
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
 
-    return items
+            # model binary formats: show filename and size
+            if fn.endswith('.ubj') or fn.endswith('.bin') or fn.endswith('.model'):
+                # keep size already set
+                pass
+
+        items.append(entry)
+
+    # Also include known artifact paths (legacy locations) that may not be in the latest run dir
+    extras = []
+    # common known files to check at registry root
+    known = [xgb_meta_path, xgb_model_path,]
+    for p in known:
+        if p and os.path.exists(p):
+            bn = os.path.basename(p)
+            if not any(it.get('name') == bn for it in items):
+                try:
+                    st = os.stat(p)
+                    mtime_iso = datetime.datetime.fromtimestamp(st.st_mtime).isoformat()
+                    sz = st.st_size
+                except Exception:
+                    mtime_iso = None
+                    sz = 0
+                extras.append({
+                    "name": bn,
+                    "path": p,
+                    "status": "ready",
+                    "detail": f"{round(sz/1024,1)} KB",
+                    "kind": os.path.splitext(bn)[1].lstrip('.'),
+                    "size_bytes": sz,
+                    "size_human": _human_size(sz),
+                    "mtime": mtime_iso,
+                })
+
+    return items + extras
+
+
+def _collect_models_for_run(ticker: str | None = None, run_dir: str | None = None):
+    """Return a list of model summaries (type, present, brief info) for the given run directory."""
+    t = _safe_ticker(ticker)
+    summaries = []
+    # xgb regressor
+    xgb_model_path, xgb_meta_path = xgb_paths(t, run_dir=run_dir)
+    if os.path.exists(xgb_meta_path):
+        jm = _load_json(xgb_meta_path) or {}
+        summaries.append({
+            "name": "XGB Regressor",
+            "type": "xgb",
+            "present": True,
+            "meta": jm,
+            "info": f"features={len(jm.get('features', []))}" if isinstance(jm, dict) and jm.get('features') else "meta"
+        })
+    # xgb classifier
+    xgbc_model_path, xgbc_meta_path = xgb_classifier_paths(t, run_dir=run_dir)
+    if os.path.exists(xgbc_meta_path):
+        jm = _load_json(xgbc_meta_path) or {}
+        summaries.append({
+            "name": "XGB Classifier",
+            "type": "xgb_classifier",
+            "present": True,
+            "meta": jm,
+            "info": f"features={len(jm.get('features', []))}" if isinstance(jm, dict) and jm.get('features') else "meta"
+        })
+    # pca
+    pca_meta_path, _ = pca_paths(t, run_dir=run_dir)
+    if os.path.exists(pca_meta_path):
+        jm = _load_json(pca_meta_path) or {}
+        info = None
+        if isinstance(jm, dict):
+            if jm.get('components'):
+                info = f"components={len(jm.get('components', []))}"
+            elif jm.get('explained_variance'):
+                info = f"explained={jm.get('explained_variance')[:3]}"
+        summaries.append({"name": "PCA", "type": "pca", "present": True, "meta": jm, "info": info or 'meta'})
+    # clustering
+    cluster_meta_path, _ = cluster_paths(t, run_dir=run_dir)
+    if os.path.exists(cluster_meta_path):
+        jm = _load_json(cluster_meta_path) or {}
+        info = f"centers={len(jm.get('centers', []))}" if isinstance(jm, dict) and jm.get('centers') else 'meta'
+        summaries.append({"name": "Clustering", "type": "clustering", "present": True, "meta": jm, "info": info})
+    # forecast
+    forecast_meta_path = forecast_path(t, run_dir=run_dir)
+    if os.path.exists(forecast_meta_path):
+        jm = _load_json(forecast_meta_path) or {}
+        info = 'forecast' if jm else 'meta'
+        summaries.append({"name": "Forecast", "type": "forecast", "present": True, "meta": jm, "info": info})
+    # association
+    assoc_meta_path = association_path(t, run_dir=run_dir)
+    if os.path.exists(assoc_meta_path):
+        jm = _load_json(assoc_meta_path) or {}
+        info = 'rules' if jm else 'meta'
+        summaries.append({"name": "Association Rules", "type": "association", "present": True, "meta": jm, "info": info})
+
+    return summaries
 
 class PredictRequest(BaseModel):
     features: list
@@ -154,7 +347,8 @@ def health(request: Request):
     return payload
 
 @router.get("/model-info")
-def model_info(request: Request, ticker: str = Query("AAPL")):
+def model_info(request: Request, ticker: str = Query("AAPL"), raw: str | None = Query(None), run: str | None = Query(None)):
+    # if ticker == 'ALL' render a registry-wide overview
     t = _safe_ticker(ticker)
     xgb_model_path, xgb_meta_path = xgb_paths(t)
     xgb_cls_model_path, xgb_cls_meta_path = xgb_classifier_paths(t)
@@ -168,6 +362,102 @@ def model_info(request: Request, ticker: str = Query("AAPL")):
     cluster_meta = _load_json(cluster_meta_path)
     forecast_meta = _load_json(forecast_meta_path)
     artifacts = _collect_artifacts(t)
+
+    # enumerate all run directories for this ticker (if any) and collect artifacts per run
+    runs_data = []
+    ticker_base = os.path.join(MODEL_REGISTRY, t)
+    if os.path.isdir(ticker_base):
+        runs = sorted([d for d in os.listdir(ticker_base) if os.path.isdir(os.path.join(ticker_base, d))])
+        for r in runs:
+            rd = os.path.join(ticker_base, r)
+            try:
+                art = _collect_artifacts(t, run_dir=rd)
+            except Exception:
+                art = []
+            # collect model summaries for this run
+            try:
+                models = _collect_models_for_run(t, run_dir=rd)
+            except Exception:
+                models = []
+            runs_data.append({"run": r, "path": rd, "artifacts": art, "models": models})
+
+    # If user requested a full registry overview (ticker=ALL), scan every ticker folder
+    registry_overview = None
+    if ticker and str(ticker).upper() in ("ALL", "*"):
+        registry_overview = []
+        try:
+            for tk in sorted([d for d in os.listdir(MODEL_REGISTRY) if os.path.isdir(os.path.join(MODEL_REGISTRY, d))]):
+                tbase = os.path.join(MODEL_REGISTRY, tk)
+                truns = sorted([d for d in os.listdir(tbase) if os.path.isdir(os.path.join(tbase, d))])
+                ticker_entry = {"ticker": tk, "runs": []}
+                for r in truns:
+                    rd = os.path.join(tbase, r)
+                    try:
+                        art = _collect_artifacts(tk, run_dir=rd)
+                    except Exception:
+                        art = []
+                    try:
+                        models = _collect_models_for_run(tk, run_dir=rd)
+                    except Exception:
+                        models = []
+                    ticker_entry["runs"].append({"run": r, "path": rd, "artifacts": art, "models": models})
+                registry_overview.append(ticker_entry)
+        except Exception:
+            registry_overview = registry_overview or []
+
+    # If client asked for a specific artifact's raw content, return it as JSON (safe, registry-only)
+    if raw:
+        # if a run is provided, look inside that run directory first
+        safe_name = os.path.basename(raw)
+        if run:
+            candidate_dir = os.path.join(MODEL_REGISTRY, t, run)
+            target = os.path.join(candidate_dir, safe_name)
+        else:
+            # determine candidate run dir (reuse similar logic from _collect_artifacts)
+            candidate_dir = os.path.dirname(xgb_meta_path) if xgb_meta_path else MODEL_REGISTRY
+            ticker_base = os.path.join(MODEL_REGISTRY, t)
+            if os.path.isdir(ticker_base):
+                runs = [d for d in os.listdir(ticker_base) if os.path.isdir(os.path.join(ticker_base, d))]
+                if runs:
+                    latest = sorted(runs)[-1]
+                    candidate_dir = os.path.join(ticker_base, latest)
+            target = os.path.join(candidate_dir, safe_name)
+        if not os.path.exists(target):
+            # fallback to registry root
+            target = os.path.join(MODEL_REGISTRY, safe_name)
+
+        if not os.path.exists(target):
+            raise HTTPException(status_code=404, detail="Artifact not found")
+
+        info = {}
+        try:
+            st = os.stat(target)
+            info['size_bytes'] = st.st_size
+            info['mtime'] = datetime.datetime.fromtimestamp(st.st_mtime).isoformat()
+        except Exception:
+            pass
+
+        if target.endswith('.json'):
+            content = _load_json(target)
+            return {"meta": info, "content": _sanitize_for_json(content)}
+        if target.endswith('.npy'):
+            try:
+                arr = np.load(target, mmap_mode='r')
+                out = {"shape": getattr(arr, 'shape', None), "dtype": str(getattr(arr, 'dtype', None))}
+                # attempt small sample summary
+                try:
+                    sample = np.array(arr.flat[:200])
+                    out.update({"sample_min": float(sample.min()), "sample_max": float(sample.max())})
+                except Exception:
+                    pass
+                return {"meta": info, "content": _sanitize_for_json(out)}
+            except Exception:
+                raise HTTPException(status_code=500, detail="Could not read npy")
+        # fallback: return basic file info
+        try:
+            return {"meta": info, "name": os.path.basename(target)}
+        except Exception:
+            raise HTTPException(status_code=500, detail="Cannot read artifact")
 
     legacy_meta: dict = {}
     if xgb_meta:
@@ -183,6 +473,13 @@ def model_info(request: Request, ticker: str = Query("AAPL")):
 
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
+        # build registry tickers list for dropdown selector
+        registry_tickers = []
+        try:
+            registry_tickers = sorted([d for d in os.listdir(MODEL_REGISTRY) if os.path.isdir(os.path.join(MODEL_REGISTRY, d))])
+        except Exception:
+            registry_tickers = []
+
         return templates.TemplateResponse(
             "model_info.html",
             {
@@ -196,6 +493,9 @@ def model_info(request: Request, ticker: str = Query("AAPL")):
                 "forecast_meta": forecast_meta,
                 "artifacts": artifacts,
                 "ticker": t,
+                "runs": runs_data,
+                "registry": registry_overview,
+                "registry_tickers": registry_tickers,
             },
         )
 
@@ -399,3 +699,27 @@ def association_info(ticker: str = Query("AAPL")):
         raise HTTPException(status_code=404, detail="Association rules not found. Run association flow.")
     with open(path, "r") as f:
         return json.load(f)
+
+
+@router.get("/artifact-download")
+def artifact_download(raw: str = Query(...), ticker: str = Query("AAPL")):
+    # Return a file response for a given artifact name if it exists in latest run dir or registry root
+    t = _safe_ticker(ticker)
+    xgb_model_path, xgb_meta_path = xgb_paths(t)
+    candidate_dir = os.path.dirname(xgb_meta_path) if xgb_meta_path else MODEL_REGISTRY
+    ticker_base = os.path.join(MODEL_REGISTRY, t)
+    if os.path.isdir(ticker_base):
+        runs = [d for d in os.listdir(ticker_base) if os.path.isdir(os.path.join(ticker_base, d))]
+        if runs:
+            latest = sorted(runs)[-1]
+            candidate_dir = os.path.join(ticker_base, latest)
+
+    safe_name = os.path.basename(raw)
+    target = os.path.join(candidate_dir, safe_name)
+    if not os.path.exists(target):
+        target = os.path.join(MODEL_REGISTRY, safe_name)
+    if not os.path.exists(target):
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    from fastapi.responses import FileResponse
+    return FileResponse(path=target, filename=safe_name, media_type='application/octet-stream')

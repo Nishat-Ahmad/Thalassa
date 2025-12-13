@@ -1,114 +1,325 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="section-header">
-  <h1>Model & Artifact Info</h1>
-  <p class="muted">Snapshot of deployed models and derived artifacts.</p>
-</section>
-
-<div class="cards">
-  <div class="card">
-    <h3>XGB Regressor</h3>
-    {% if xgb_meta and xgb_meta.features %}
-      <p><strong>Features:</strong> {{ xgb_meta.features|length }}</p>
-      <p class="muted">Objective: {{ xgb_meta.objective or '-' }}</p>
-    {% else %}
-      <p class="muted">Not available.</p>
-    {% endif %}
-  </div>
-  <div class="card">
-    <h3>XGB Classifier</h3>
-    {% if xgb_cls_meta and xgb_cls_meta.features %}
-      <p><strong>Features:</strong> {{ xgb_cls_meta.features|length }}</p>
-      <p class="muted">Classes: {{ xgb_cls_meta.num_classes or '-' }}</p>
-    {% else %}
-      <p class="muted">Not available.</p>
-    {% endif %}
-  </div>
-  <div class="card">
-    <h3>PCA</h3>
-    {% if pca_meta and pca_meta.components and pca_meta.feature_order %}
-      <p><strong>Components:</strong> {{ pca_meta.components|length }}</p>
-      <p class="muted">Feature dims: {{ pca_meta.feature_order|length }}</p>
-    {% else %}
-      <p class="muted">Not available.</p>
-    {% endif %}
-  </div>
-  <div class="card">
-    <h3>Clustering</h3>
-    {% if cluster_meta and cluster_meta.centers %}
-      <p><strong>Centers:</strong> {{ cluster_meta.centers|length }}</p>
-      <p class="muted">Features: {{ cluster_meta.feature_order|length if cluster_meta.feature_order else '-' }}</p>
-    {% else %}
-      <p class="muted">Not available.</p>
-    {% endif %}
-  </div>
-  <div class="card">
-    <h3>Forecast</h3>
-    {% if forecast_meta and forecast_meta.predictions %}
-      <p><strong>Horizon:</strong> {{ forecast_meta.predictions|length }}</p>
-      <p class="muted">Generated: {{ forecast_meta.generated_at or '-' }}</p>
-    {% else %}
-      <p class="muted">Not available.</p>
-    {% endif %}
-  </div>
-</div>
+<!-- Static model descriptions: ticker-agnostic explanatory content -->
 
 <div class="panel">
   <div class="section-header">
-    <h1>Artifact Status</h1>
-    <p class="muted">Presence and quick details for each artifact.</p>
+    <h1>All Runs for {{ ticker }}</h1>
+    <p class="muted">Select a run to inspect artifacts produced at that time.</p>
   </div>
-  <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr><th>Name</th><th>Status</th><th>Detail</th></tr>
-      </thead>
-      <tbody>
-        {% for item in artifacts %}
-        <tr>
-          <td>{{ item.name }}</td>
-          <td>
-            <span class="badge" style="background: {% if item.status == 'ready' %}rgba(17,219,201,0.15){% else %}rgba(170,85,85,0.15){% endif %}; border-color: {% if item.status == 'ready' %}var(--primary){% else %}#aa5555{% endif %}; color: var(--text);">
-              {{ item.status }}
-            </span>
-          </td>
-          <td>{{ item.detail or '-' }}</td>
-        </tr>
+  <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+    <label style="color:var(--muted); font-weight:600;">Registry:</label>
+    <select id="registrySelect" style="padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text);">
+      <option value="{{ ticker }}">Current: {{ ticker }}</option>
+      <option value="ALL">All Tickers</option>
+      {% if registry_tickers %}
+        {% for rt in registry_tickers %}
+          <option value="{{ rt }}" {% if rt == ticker %}selected{% endif %}>{{ rt }}</option>
         {% endfor %}
-      </tbody>
-    </table>
+      {% endif %}
+    </select>
   </div>
+  {% if registry %}
+    {% for tk in registry %}
+      <div class="panel">
+        <div class="section-header"><h2>{{ tk.ticker }}</h2></div>
+        <div class="cards">
+          {% for rr in tk.runs %}
+            <article class="card run-card" data-run="{{ rr.run }}">
+              <div class="run-head">
+                <div>
+                  <h3 style="margin:0;">{{ rr.run }}</h3>
+                  <div class="run-path muted">Path: {{ rr.path }}</div>
+                </div>
+                <div class="run-actions">
+                  <button class="btn btn-outline" onclick="toggleArtifacts(this)">Toggle Artifacts</button>
+                </div>
+              </div>
+              {% if rr.models and rr.models|length %}
+                <div class="models-row" style="margin-bottom:8px;font-size:0.95rem;">
+                  <strong class="models-title">Trained Models:</strong>
+                  <div class="models-chips">
+                    {% for m in rr.models %}
+                      <div class="model-chip">
+                        <div class="model-name">{{ m.name }}</div>
+                        {% if m.info %}<div class="model-info muted">{{ m.info }}</div>{% endif %}
+                      </div>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endif %}
+              <div style="font-size:0.95rem;" class="artifact-container">
+                <strong>Artifacts:</strong>
+                <div class="artifact-list" style="margin-top:8px;">
+                  {% for a in rr.artifacts %}
+                    <div class="artifact-item">
+                      <div class="artifact-left">
+                        <button class="artifact-name" data-name="{{ a.name }}" data-run="{{ rr.run }}" data-ticker="{{ tk.ticker }}" onclick="previewArtifact(this)">{{ a.name }}</button>
+                        <div class="artifact-meta">
+                          <!-- file type token removed -->
+                        </div>
+                      </div>
+                      <div class="artifact-right">
+                        <div class="artifact-actions">
+                          <button class="btn btn-outline" onclick="previewArtifact(this.closest('.artifact-item').querySelector('.artifact-name'))">Preview</button>
+                          <button class="btn btn-outline" data-name="{{ a.name }}" data-run="{{ rr.run }}" data-ticker="{{ tk.ticker }}" onclick="toggleDetail(this)">Details</button>
+                          <a class="btn" href="/artifact-download?raw={{ a.name }}&ticker={{ tk.ticker }}" title="Download {{ a.name }}">Download</a>
+                        </div>
+                      </div>
+                      {% if a.npy_shape or a.npy_dtype or a.npy_min is defined or a.npy_max is defined %}
+                        <div class="artifact-npy muted" style="display:none;">
+                          {% if a.npy_shape %}<span class="npy-pill">shape={{ a.npy_shape }}</span>{% endif %}
+                          {% if a.npy_dtype %}<span class="npy-pill">dtype={{ a.npy_dtype }}</span>{% endif %}
+                          {% if a.npy_min is defined %}<span class="npy-pill">min={{ a.npy_min }}</span>{% endif %}
+                          {% if a.npy_max is defined %}<span class="npy-pill">max={{ a.npy_max }}</span>{% endif %}
+                        </div>
+                      {% endif %}
+                      <div class="artifact-full-detail muted" style="display:none; margin-top:6px;" data-loaded="false"></div>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="cards">
+      {% for r in runs %}
+      <article class="card run-card" data-run="{{ r.run }}">
+        <div class="run-head">
+          <div>
+            <h3 style="margin:0;">{{ r.run }}</h3>
+            <div class="run-path muted">Path: {{ r.path }}</div>
+          </div>
+          <div class="run-actions">
+            <button class="btn btn-outline" onclick="toggleArtifacts(this)">Toggle Artifacts</button>
+          </div>
+        </div>
+        {% if r.models and r.models|length %}
+          <div class="models-row" style="margin-bottom:8px;font-size:0.95rem;">
+            <strong class="models-title">Trained Models:</strong>
+            <div class="models-chips">
+              {% for m in r.models %}
+                <div class="model-chip">
+                  <div class="model-name">{{ m.name }}</div>
+                  {% if m.info %}<div class="model-info muted">{{ m.info }}</div>{% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+        <div style="font-size:0.95rem;" class="artifact-container">
+          <strong>Artifacts:</strong>
+          <div class="artifact-list" style="margin-top:8px;">
+            {% for a in r.artifacts %}
+              <div class="artifact-item">
+                <div class="artifact-left">
+                  <button class="artifact-name" data-name="{{ a.name }}" data-run="{{ r.run }}" data-ticker="{{ ticker }}" onclick="previewArtifact(this)">{{ a.name }}</button>
+                  <div class="artifact-meta">
+                    {% if a.detail %}
+                      <span class="muted meta-detail" title="{{ a.detail }}">{{ a.detail }}</span>
+                      <button class="btn btn-outline small" data-name="{{ a.name }}" data-run="{{ r.run }}" data-ticker="{{ ticker }}" onclick="toggleDetail(this)">Details</button>
+                      <div class="artifact-full-detail muted" style="display:none; margin-top:6px;" data-loaded="false"></div>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="artifact-right">
+                  <div class="artifact-stats muted">
+                    {% if a.size_human %}{{ a.size_human }}{% elif a.size_bytes is defined %}{{ a.size_bytes }} B{% endif %}
+                    {% if a.mtime %} • {{ a.mtime }}{% endif %}
+                  </div>
+                  <div class="artifact-actions">
+                    <button class="btn btn-outline" onclick="previewArtifact(this.closest('.artifact-item').querySelector('.artifact-name'))">Preview</button>
+                    <a class="btn" href="/artifact-download?raw={{ a.name }}&ticker={{ ticker }}" title="Download {{ a.name }}">Download</a>
+                  </div>
+                </div>
+                {% if a.npy_shape or a.npy_dtype or a.npy_min is defined or a.npy_max is defined %}
+                  <div class="artifact-npy muted">
+                    {% if a.npy_shape %}<strong>NPY:</strong> shape={{ a.npy_shape }}{% endif %}
+                    {% if a.npy_dtype %} • dtype={{ a.npy_dtype }}{% endif %}
+                    {% if a.npy_min is defined %} • min={{ a.npy_min }}{% endif %}
+                    {% if a.npy_max is defined %} • max={{ a.npy_max }}{% endif %}
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  {% endif %}
 </div>
 
-<div class="panel">
-  <div class="section-header">
-    <h1>Feature Lists</h1>
-    <p class="muted">Key columns expected by each model.</p>
-  </div>
-  <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr><th>Model</th><th>Features</th></tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>XGB Regressor</td>
-          <td>{% if xgb_meta and xgb_meta.features %}{{ xgb_meta.features|join(', ') }}{% else %}-{% endif %}</td>
-        </tr>
-        <tr>
-          <td>XGB Classifier</td>
-          <td>{% if xgb_cls_meta and xgb_cls_meta.features %}{{ xgb_cls_meta.features|join(', ') }}{% else %}-{% endif %}</td>
-        </tr>
-        <tr>
-          <td>PCA</td>
-          <td>{% if pca_meta and pca_meta.feature_order %}{{ pca_meta.feature_order|join(', ') }}{% else %}-{% endif %}</td>
-        </tr>
-        <tr>
-          <td>Clusters</td>
-          <td>{% if cluster_meta and cluster_meta.feature_order %}{{ cluster_meta.feature_order|join(', ') }}{% else %}-{% endif %}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+<!-- Artifact preview placed directly under All Runs panel -->
+<div id="artifactPreview" class="panel" style="display:none; margin-top:12px;">
+  <div class="section-header"><h2>Artifact Preview</h2><p class="muted">JSON preview (truncated)</p></div>
+  <pre id="artifactJson" style="white-space:pre-wrap;word-break:break-word;color:var(--muted);max-height:420px;overflow:auto;padding:8px;background:transparent;border:0"></pre>
+  <div style="margin-top:10px"><button class="btn" onclick="closePreview()">Close</button></div>
 </div>
+
+  <div class="section-header">
+    <h1>Model Overview (General)</h1>
+  </div>
+
+  <div class="cards cards-vertical">
+    <article class="card">
+      <h3>XGBoost Regressor</h3>
+      <p class="muted small">Primary short-horizon numeric predictor (price/return). Trained on engineered features; produces scalar forecasts and artifacts (model binary, metrics, SHAP).</p>
+      <p class="muted small">Typical params: <strong>n_estimators</strong>, <strong>max_depth</strong>, <strong>learning_rate</strong>. Evaluated with time-aware RMSE/MAE and monitored for drift.</p>
+    </article>
+
+    <article class="card">
+      <h3>XGBoost Classifier</h3>
+      <p class="muted small">Directional signal model that outputs class probabilities and labels (e.g., up/down). Produces classifier artifacts and calibrated probabilities for downstream rules.</p>
+      <p class="muted small">Key metrics: AUC-ROC, PR-AUC, precision at chosen thresholds. Tuned with similar tree params and class-weighting when needed.</p>
+    </article>
+
+    <article class="card">
+      <h3>PCA (Principal Component Analysis)</h3>
+      <p class="muted small">Dimensionality reduction for visualization and preprocessing. Produces component scores, loadings, and explained-variance artifacts used by clustering and monitoring.</p>
+      <p class="muted small">Usually retains components covering ~90% variance or a fixed count; inputs should be standardized.</p>
+    </article>
+
+    <article class="card">
+      <h3>Clustering</h3>
+      <p class="muted small">Unsupervised grouping used to tag market regimes. Outputs include cluster labels, centroids, and mappings saved as artifacts.</p>
+      <p class="muted small">Results inform regime-specific modeling, ensemble weighting, and drift detection.</p>
+    </article>
+
+    <article class="card">
+      <h3>Forecasting / Time-series Models</h3>
+      <p class="muted small">Multi-horizon forecasting (1/3/7 days) used for short-term planning. Typically implemented with XGBoost on lag features; outputs are horizon-specific forecasts and metrics.</p>
+      <p class="muted small">Evaluated per-horizon (SMAPE, MASE); artifacts include forecast CSVs and metrics JSON.</p>
+    </article>
+
+    <article class="card">
+      <h3>Association Rules</h3>
+      <p class="muted small">Mines frequent co-occurrences among discretized indicator events to surface candidate signals. Outputs are rules with support/confidence/lift saved as artifacts.</p>
+      <p class="muted small">Primarily used by analysts to suggest engineered features and hypotheses for supervised models.</p>
+    </article>
+  </div>
+
+<script>
+  async function previewArtifact(el){
+    const name = el.getAttribute('data-name');
+    const pre = document.getElementById('artifactJson');
+    const panel = document.getElementById('artifactPreview');
+    panel.style.display = 'block';
+    panel.scrollIntoView({behavior:'smooth', block:'start'});
+    pre.textContent = 'Loading...';
+    try{
+      const run = el.getAttribute('data-run');
+      const btnTicker = el.getAttribute('data-ticker') || '{{ ticker }}';
+      const url = `/model-info?ticker=${encodeURIComponent(btnTicker)}&raw=${encodeURIComponent(name)}` + (run ? `&run=${encodeURIComponent(run)}` : '');
+      const r = await fetch(url, { headers:{ 'accept':'application/json' } });
+      const j = await r.json();
+      if(j && j.content !== undefined) pre.textContent = JSON.stringify(j.content, null, 2);
+      else pre.textContent = JSON.stringify(j, null, 2);
+    }catch(e){ pre.textContent = 'Error loading artifact: ' + e; }
+  }
+  // navigate when registry selection changes
+  (function(){
+    const sel = document.getElementById('registrySelect');
+    if(sel){
+      sel.addEventListener('change', function(){
+        const v = sel.value || '{{ ticker }}';
+        window.location.href = `/model-info?ticker=${encodeURIComponent(v)}`;
+      });
+    }
+  })();
+  function closePreview(){ document.getElementById('artifactPreview').style.display = 'none'; }
+
+  function toggleArtifacts(btn){
+    const card = btn.closest('.run-card');
+    if(!card) return;
+    const list = card.querySelector('.artifact-list');
+    if(!list) return;
+    list.classList.toggle('collapsed');
+    btn.textContent = list.classList.contains('collapsed') ? 'Show Artifacts' : 'Hide Artifacts';
+    // scroll preview into view when expanding
+    if(!list.classList.contains('collapsed')){
+      list.scrollIntoView({behavior:'smooth', block:'center'});
+    }
+  }
+
+  async function inspectNpy(el){
+    const name = el.getAttribute('data-name');
+    const pre = document.getElementById('artifactJson');
+    const panel = document.getElementById('artifactPreview');
+    panel.style.display = 'block';
+    panel.scrollIntoView({behavior:'smooth', block:'start'});
+    pre.textContent = 'Inspecting...';
+    try{
+      const r = await fetch(`/model-info?ticker={{ ticker }}&raw=${encodeURIComponent(name)}`, { headers:{ 'accept':'application/json' } });
+      const j = await r.json();
+      if(j && j.content) pre.textContent = JSON.stringify(j.content, null, 2);
+      else pre.textContent = JSON.stringify(j, null, 2);
+    }catch(e){ pre.textContent = 'Error inspecting npy: ' + e; }
+  }
+
+  function toggleDetail(btn){
+    const card = btn.closest('.artifact-item');
+    if(!card) return;
+    const detail = card.querySelector('.artifact-full-detail');
+    if(!detail) return;
+    const shown = detail.style.display !== 'none';
+    if(shown){
+      detail.style.display = 'none';
+      btn.textContent = 'Details';
+      return;
+    }
+    // show and load if necessary
+    detail.style.display = 'block';
+    btn.textContent = 'Hide';
+    const loaded = detail.getAttribute('data-loaded') === 'true';
+    if(!loaded){
+      // fetch artifact content and render nicely
+      const name = btn.getAttribute('data-name');
+      const run = btn.getAttribute('data-run');
+      const tk = btn.getAttribute('data-ticker') || '{{ ticker }}';
+      renderArtifactDetail(name, tk, run, detail);
+    }
+    detail.scrollIntoView({behavior:'smooth', block:'center'});
+  }
+
+  async function renderArtifactDetail(name, ticker, run, container){
+    container.textContent = 'Loading...';
+    try{
+      const url = `/model-info?ticker=${encodeURIComponent(ticker)}&raw=${encodeURIComponent(name)}` + (run ? `&run=${encodeURIComponent(run)}` : '');
+      const r = await fetch(url, { headers:{ 'accept':'application/json' } });
+      const j = await r.json();
+      const content = j && j.content !== undefined ? j.content : j;
+      // If content is an object, render key/value chips
+      if(content && typeof content === 'object' && !Array.isArray(content)){
+        // render as chips (key + compact value)
+        const chips = document.createElement('div');
+        chips.className = 'detail-chips';
+        for(const k of Object.keys(content)){
+          const v = content[k];
+          const chip = document.createElement('div'); chip.className = 'detail-chip';
+          const keyEl = document.createElement('div'); keyEl.className = 'chip-key'; keyEl.textContent = k;
+          const valEl = document.createElement('div'); valEl.className = 'chip-val';
+          if(v === null || v === undefined) { valEl.textContent = String(v); }
+          else if(Array.isArray(v)) { valEl.textContent = `Array[${v.length}]`; valEl.title = JSON.stringify(v.slice(0,5)); }
+          else if(typeof v === 'object'){ valEl.textContent = 'Object'; valEl.title = JSON.stringify(v); }
+          else { valEl.textContent = String(v); }
+          chip.appendChild(keyEl); chip.appendChild(valEl); chips.appendChild(chip);
+        }
+        container.innerHTML = ''; container.appendChild(chips);
+      } else if(Array.isArray(content)){
+        const el = document.createElement('div'); el.className = 'detail-array'; el.textContent = `Array[${content.length}]`; el.title = JSON.stringify(content.slice(0,10)); container.innerHTML=''; container.appendChild(el);
+      } else {
+        // primitive: show prettified JSON
+        const pre = document.createElement('pre'); pre.textContent = JSON.stringify(content, null, 2);
+        container.innerHTML=''; container.appendChild(pre);
+      }
+      container.setAttribute('data-loaded','true');
+    }catch(e){ container.textContent = 'Error loading detail: ' + e; }
+  }
+</script>
+
+<!-- Feature Lists panel removed as requested -->
 {% endblock %}

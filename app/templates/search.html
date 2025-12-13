@@ -15,6 +15,7 @@
         {% endfor %}
       </select>
     </label>
+    <button id="downloadCsvBtn" class="btn modern-btn" type="button">Download CSV</button>
     <button id="searchBtn" class="btn modern-btn" type="submit">Fetch</button>
   </form>
 </section>
@@ -109,6 +110,7 @@
   <div class="chart-wrap modern-chart">
     <canvas id="volumeChart" height="140"></canvas>
   </div>
+  
   <div class="table-wrap modern-table">
     <table class="table">
       <thead>
@@ -216,7 +218,7 @@
 
   if (volumeCtx && Array.isArray(recentData) && recentData.length) {
     const vctx = volumeCtx.getContext('2d');
-    const gradVol = createGradient(vctx, 'rgba(255, 255, 255, 0.6)', 'rgba(88, 163, 255, 0.12)');
+    const gradVol = createGradient(vctx, 'rgba(255, 255, 255, 0.6)', 'rgba(255, 255, 255, 0.12)');
     new Chart(vctx, {
       type: 'bar',
       data: {
@@ -281,6 +283,58 @@
     periodSelect && periodSelect.addEventListener('change', saveState);
     searchBtn && searchBtn.addEventListener('click', saveState);
     form && form.addEventListener('submit', saveState);
+  })();
+</script>
+
+<script>
+  (function(){
+    const btn = document.getElementById('downloadCsvBtn');
+    const tickerName = "{{ ticker or 'dataset' }}";
+    function downloadCSVFromArray(data, filename){
+      if(!data || !data.length) return;
+      const keys = Object.keys(data[0]);
+      const rows = [keys.join(',')].concat(data.map(row => keys.map(k=>{
+        const v = row[k];
+        if(v === null || v === undefined) return '';
+        const s = String(v);
+        const needsQuotes = /[",\n,]/.test(s);
+        const esc = s.replace(/"/g, '""');
+        return needsQuotes ? '"' + esc + '"' : esc;
+      }).join(',')));
+      const csv = rows.join('\r\n');
+      const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || (tickerName + '-data.csv');
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=> URL.revokeObjectURL(url), 200);
+    }
+
+    if(btn){
+      btn.addEventListener('click', function(){
+        try{
+          if(typeof recentData !== 'undefined' && Array.isArray(recentData) && recentData.length){
+            downloadCSVFromArray(recentData, (tickerName||'dataset') + '-prices.csv');
+          } else {
+            // fallback: try to serialize table rows
+            const table = document.querySelector('.table-wrap table');
+            if(!table) return;
+            const headers = Array.from(table.querySelectorAll('thead th')).map(h=>h.textContent.trim());
+            const bodyRows = Array.from(table.querySelectorAll('tbody tr'));
+            const arr = bodyRows.map(tr => {
+              const cells = Array.from(tr.querySelectorAll('td')).map(td=>td.textContent.trim());
+              const obj = {};
+              headers.forEach((k,i)=> obj[k||('col'+i)] = cells[i] || '');
+              return obj;
+            });
+            if(arr.length) downloadCSVFromArray(arr, (tickerName||'dataset') + '-prices.csv');
+          }
+        }catch(e){ console.error('CSV export failed', e); }
+      }, false);
+    }
   })();
 </script>
 {% endif %}

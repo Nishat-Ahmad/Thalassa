@@ -173,6 +173,117 @@ body > .footer { flex: 0 0 auto; margin-top: auto; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow); }
 .card h3 { margin: 0 0 6px; font-size: 1.05rem; }
 
+/* Run card improvements */
+.run-card { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.run-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.run-head h3 { font-size:1.05rem; margin:0; }
+.run-path { font-size:0.82rem; color:var(--muted); margin-top:4px; }
+.run-actions { display:flex; gap:8px; align-items:center; }
+.artifact-container { transition: max-height 0.22s ease; }
+.artifact-list { margin-top:8px; display:flex; flex-direction:column; gap:8px; }
+.artifact-list.collapsed { display:none; }
+
+.artifact-item { padding:10px 12px; border-radius:10px; background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00)); border:1px solid rgba(255,255,255,0.02); display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.artifact-left { display:flex; flex-direction:column; gap:6px; }
+.artifact-right { display:flex; gap:8px; align-items:center; justify-content:center; }
+.artifact-name { font-weight:600; color:var(--primary); }
+
+/* Trained models chips */
+.models-row { display:flex; flex-direction:column; gap:8px; }
+.models-title { display:block; font-weight:700; margin-bottom:6px; }
+.models-chips { display:flex; gap:8px; flex-wrap:wrap; }
+.model-chip { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00)); border:1px solid rgba(255,255,255,0.03); padding:8px 10px; border-radius:10px; min-width:140px; display:flex; flex-direction:column; gap:4px; }
+.model-name { font-weight:700; font-size:0.95rem; color:var(--text); }
+.model-info { font-size:0.82rem; color:var(--muted); }
+
+/* Compact NPY pill */
+.npy-pill { display:inline-block; background: rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.03); color:var(--muted); padding:4px 8px; border-radius:8px; font-size:0.8rem; margin-left:6px; }
+.meta-detail { color: rgba(255,255,255,0.85); margin-left:6px; }
+
+/* Compact action buttons */
+.artifact-actions .btn { padding:6px 10px; font-size:0.85rem; }
+.artifact-actions .btn.btn-outline { background: transparent; border-color: rgba(255,255,255,0.04); }
+
+/* Slight hover emphasis */
+.artifact-item:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,0.18); }
+
+/* Small variant for inline detail button */
+.btn.small { padding:4px 8px; font-size:0.78rem; }
+.artifact-full-detail { font-size:0.85rem; color:var(--muted); background: rgba(255,255,255,0.01); border-radius:8px; padding:8px; border:1px solid rgba(255,255,255,0.02); }
+.meta-detail { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: none; vertical-align: middle; }
+
+/* Detail renderer styles */
+.detail-kv { display:flex; flex-direction:column; gap:6px; }
+.detail-row { display:flex; gap:12px; align-items:center; }
+.detail-key { min-width:140px; color:var(--muted); font-weight:700; }
+.detail-val { color:var(--text); font-family: monospace; overflow:hidden; text-overflow:ellipsis; }
+.detail-array { color:var(--text); font-family: monospace; }
+
+/* Chip-styled detail dump */
+.detail-chips { display:flex; gap:8px; flex-wrap:wrap; }
+.detail-chip { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00)); border:1px solid rgba(255,255,255,0.03); padding:8px 10px; border-radius:10px; min-width:160px; display:flex; flex-direction:column; gap:6px; }
+.chip-key { color:var(--muted); font-weight:700; font-size:0.82rem; }
+.chip-val { color:var(--text); font-family: monospace; font-size:0.92rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Horizontal layout variant for specific card groups (non-destructive) */
+.cards-horizontal {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+.cards-horizontal .card {
+  min-width: 320px;
+  flex: 0 0 320px;
+}
+@media (max-width: 760px) {
+  .cards-horizontal { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .cards-horizontal .card { min-width: initial; flex: initial; }
+}
+
+/* Vertical stack variant: force each card to own full-width row */
+.cards-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cards-vertical .card {
+  width: 100%;
+}
+
+/* small link-like button for artifact names */
+.artifact-link {
+  background: transparent;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.95rem;
+  text-decoration: underline;
+}
+.artifact-link:hover { opacity: 0.85; }
+
+/* New artifact list styles */
+.artifact-list { display: flex; flex-direction: column; gap: 10px; }
+.artifact-item { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.03); }
+.artifact-item .artifact-left { display:flex; flex-direction:column; gap:6px; }
+.artifact-item .artifact-right { display:flex; gap:8px; align-items:center; justify-content:center; }
+.artifact-item { grid-template-columns: 1fr auto; }
+.artifact-item { display: flex; align-items: center; justify-content: space-between; }
+.artifact-name { background: transparent; border: none; color: var(--primary); cursor: pointer; font-weight: 600; font-size: 0.98rem; text-align: left; }
+.artifact-name:hover { text-decoration: underline; }
+.artifact-meta { display:flex; gap:8px; align-items:center; font-size:0.88rem; }
+.artifact-stats { font-size:0.85rem; color: var(--muted); }
+.artifact-actions { display:flex; gap:8px; align-items:center; justify-content:center; }
+.artifact-npy { font-size:0.85rem; color: var(--muted); margin-left: 4px; display: none }
+.badge { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.04); padding: 4px 8px; border-radius: 999px; font-size: 0.78rem; }
+
+@media (max-width: 760px) {
+  .artifact-item { flex-direction: column; align-items: stretch; }
+  .artifact-right { justify-content: flex-start; gap: 6px; }
+}
+
 /* Emphasize the primary value in each card (the first paragraph after the title) */
 .card h3 + p {
   color: var(--text);
@@ -214,8 +325,11 @@ body > .footer { flex: 0 0 auto; margin-top: auto; }
 .table { width: 100%; border-collapse: collapse; }
 .table-wrap { overflow: auto; border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00)); padding: 8px; }
 .table { width: 100%; border-collapse: separate; border-spacing: 0; background: transparent; }
+.table { table-layout: fixed; }
 .table th, .table td { padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap; }
 .table thead th { color: var(--text); text-align: left; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00)); position: sticky; top: 0; z-index: 3; backdrop-filter: blur(4px); font-weight: 700; font-size: 0.95rem; }
+/* Right-align numeric column headers to match data alignment (all except first column) */
+.table thead th:not(:first-child) { text-align: right; }
 
 /* Zebra striping and hover */
 .table tbody tr:nth-child(odd) { background: rgba(255,255,255,0.01); }
@@ -229,9 +343,30 @@ body > .footer { flex: 0 0 auto; margin-top: auto; }
 .table thead th:first-child { border-top-left-radius: 8px; }
 .table thead th:last-child { border-top-right-radius: 8px; }
 
+/* Column width helpers for model_info table */
+.col-name { width: 36%; }
+.col-type { width: 12%; }
+.col-status { width: 12%; }
+.col-modified { width: 40%; }
+.col-detail { width: 30%; overflow: hidden; text-overflow: ellipsis; }
+/* Actions column removed */
+
+/* Ensure cells truncate cleanly */
+.table td { overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+
+/* Center small cells for better visual alignment */
+.col-name { text-align: left; }
+
+/* Override earlier right-align rule for model_info specific columns */
+.table td.col-type, .table td.col-status, .table td.col-modified { text-align: center; }
+.table thead th.col-type, .table thead th.col-status, .table thead th.col-modified { text-align: center; }
+.col-type, .col-status, .col-modified { vertical-align: middle; }
+.badge { display: inline-flex; align-items: center; justify-content: center; }
+
 /* Small screens: allow rows to wrap with better spacing */
 @media (max-width: 640px) {
   .table th, .table td { padding: 10px 8px; font-size: 0.88rem; }
+  .table { table-layout: auto; }
   .table-wrap { padding: 6px; }
 }
 
