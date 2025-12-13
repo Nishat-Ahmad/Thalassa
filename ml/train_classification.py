@@ -123,8 +123,24 @@ def build_labels(df: pd.DataFrame, target_col: str | None = None) -> tuple[pd.Da
     for col in ['log_return']:
         if col in X.columns:
             X = X.drop(columns=[col])
-    # Drop rows with NaNs
-    X = X.replace([np.inf, -np.inf], np.nan).dropna()
+        # Replace infinities with NaN
+        X = X.replace([np.inf, -np.inf], np.nan)
+        # Impute missing feature values conservatively so we don't lose many rows
+        # forward-fill then back-fill then fill remaining with column median
+        try:
+            X = X.fillna(method='ffill').fillna(method='bfill')
+        except Exception:
+            pass
+        # for any remaining NAs, fill with median per-column
+        for c in X.columns:
+            if X[c].isna().any():
+                try:
+                    med = float(X[c].median(skipna=True))
+                    if np.isnan(med):
+                        med = 0.0
+                except Exception:
+                    med = 0.0
+                X[c] = X[c].fillna(med)
     # Align y
     y = y[: len(X)]
     return X, y
@@ -135,8 +151,11 @@ def train_classifier(ticker: str = "AAPL", registry_dir: str | None = None):
         raise RuntimeError("xgboost not available")
     df = load_latest_features(ticker)
     X, y = build_labels(df)
-    if len(X) < 50:
-        raise ValueError("Not enough samples to train classifier")
+    # Minimum samples required to attempt training. Lowered to be more permissive
+    MIN_SAMPLES = 30
+    if len(X) < MIN_SAMPLES:
+        # return a skipped result instead of raising so the pipeline can continue
+        return {"status": "skipped", "reason": "not enough samples to train classifier", "samples": int(len(X))}
 
     dtrain = xgb.DMatrix(X, label=y, feature_names=[str(c) for c in X.columns])
     params = {

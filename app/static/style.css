@@ -53,6 +53,14 @@ body > .footer { flex: 0 0 auto; margin-top: auto; }
 .nav-toggle-label { display: block; }
 }
 
+/* overlay to capture outside clicks when mobile nav is open */
+.nav-overlay { display: none; pointer-events: none; }
+.nav-toggle:checked ~ .nav-overlay { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.28); z-index: 9999; pointer-events: auto; }
+
+@media (min-width: 761px) {
+  .nav-overlay { display: none !important; }
+}
+
 .content { flex: 1 0 auto; width: 100%; padding: 28px 0 80px; }
 
 .footer {
@@ -166,7 +174,9 @@ body > .footer { flex: 0 0 auto; margin-top: auto; }
 .section-header { margin: 6px 0 18px; }
 .section-header h1 { margin: 0.2rem 0 6px; }
 .muted { color: var(--muted); }
-.toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; align-items: center; }
+/* Ensure left-most action (Back) stays left and other controls align horizontally to the right */
+.toolbar .btn:first-child { margin-right: auto; }
 
 /* Cards */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 18px 0; }
@@ -218,6 +228,13 @@ body > .footer { flex: 0 0 auto; margin-top: auto; }
 .detail-key { min-width:140px; color:var(--muted); font-weight:700; }
 .detail-val { color:var(--text); font-family: monospace; overflow:hidden; text-overflow:ellipsis; }
 .detail-array { color:var(--text); font-family: monospace; }
+
+/* Allow long comma-separated feature lists to wrap instead of overflowing cards */
+pre.detail-array, .detail-array {
+  white-space: pre-wrap; /* preserve breaks but allow wrapping */
+  overflow-wrap: anywhere; /* break long words/strings if needed */
+  word-break: break-word;
+}
 
 /* Chip-styled detail dump */
 .detail-chips { display:flex; gap:8px; flex-wrap:wrap; }
@@ -371,6 +388,31 @@ body > .footer { flex: 0 0 auto; margin-top: auto; }
 }
 
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text); font-size: 0.75rem; }
+
+/* Collapsible sample rows for cluster samples */
+.sample-row { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.02); }
+.sample-header { display:flex; align-items:center; justify-content:space-between; gap:12px; cursor: pointer; padding: 6px 8px; }
+.sample-header:hover { background: rgba(255,255,255,0.01); }
+.sample-title { font-weight:700; color: var(--primary); }
+.sample-caret { color: var(--muted); transition: transform 0.12s ease; }
+.sample-details { padding-top: 6px; }
+
+/* Feature tokens (small chips) */
+.feature-tokens { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+.feature-chip { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.03); color: var(--muted); padding:6px 8px; border-radius:8px; font-size:0.78rem; font-weight:700; cursor:default; }
+.feature-chip:hover { background: rgba(255,255,255,0.03); color: var(--text); }
+
+/* Glossary collapsible entries */
+.glossary-list { display:flex; flex-direction:column; gap:8px; }
+.glossary-entry { border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.01); padding: 0; overflow: hidden; }
+.glossary-toggle { width:100%; text-align:left; background:transparent; border:none; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; font-weight:700; color:var(--text); }
+.glossary-toggle:hover { background: rgba(255,255,255,0.01); }
+.glossary-toggle:focus { outline: 2px solid rgba(25,211,197,0.22); outline-offset: 2px; }
+.glossary-body { padding: 10px 14px 14px 14px; color: var(--muted); display: none; }
+.glossary-entry.expanded .glossary-body { display: block; }
+.glossary-entry .caret { color: var(--muted); transition: transform 0.12s ease; }
+.glossary-entry.expanded .caret { transform: rotate(90deg); }
+
 
 /* Forms */
 .form { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; max-width: 640px; }

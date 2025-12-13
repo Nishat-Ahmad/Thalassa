@@ -20,6 +20,8 @@
         <li><a href="/tasks">ML Tasks</a></li>
         <li><a href="/contact">Support</a></li>
       </ul>
+      <!-- overlay shown on small screens when nav is open; clicking it will close the menu -->
+      <div id="nav-overlay" class="nav-overlay" aria-hidden="true"></div>
     </nav>
   </header>
 
@@ -35,16 +37,47 @@
     </div>
   </footer>
   <script>
-    // close mobile nav when clicking links
-    document.addEventListener('click', function (e) {
-      const a = e.target.closest && e.target.closest('.links a');
-      if (a) {
-        const t = document.getElementById('nav-toggle');
-        if (t) t.checked = false;
-      }
-    });
+    // Mobile nav helpers: close when clicking a link, clicking outside, or pressing Escape
+    (function(){
+      const navToggle = document.getElementById('nav-toggle');
+      const nav = document.querySelector('.nav');
 
-    // (no theme toggle) mobile nav close retained
+      // Close when a nav link is clicked (existing behavior)
+      document.addEventListener('click', function (e) {
+        const a = e.target.closest && e.target.closest('.links a');
+        if (a && navToggle) navToggle.checked = false;
+      });
+
+      // Close when clicking the overlay (better for mobile) or clicking outside
+      const overlay = document.getElementById('nav-overlay');
+      if(overlay){
+        overlay.addEventListener('click', function(){ if(navToggle) navToggle.checked = false; });
+      }
+
+      // Also close when clicking outside the nav (fallback)
+      document.addEventListener('click', function (e) {
+        if (!navToggle || !navToggle.checked) return;
+        if (e.target.closest && e.target.closest('.nav')) return;
+        navToggle.checked = false;
+      });
+
+      // Close on Escape key
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && navToggle && navToggle.checked) {
+          navToggle.checked = false;
+        }
+      });
+
+      // Close when resizing to larger widths or on scroll (common UX on mobile)
+      let lastWidth = window.innerWidth;
+      window.addEventListener('resize', function(){
+        if(!navToggle) return;
+        if(window.innerWidth > 760 && navToggle.checked) navToggle.checked = false;
+        lastWidth = window.innerWidth;
+      });
+      window.addEventListener('scroll', function(){ if(navToggle && navToggle.checked) navToggle.checked = false; }, { passive: true });
+    })();
   </script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

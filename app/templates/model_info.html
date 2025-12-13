@@ -23,7 +23,7 @@
     {% for tk in registry %}
       <div class="panel">
         <div class="section-header"><h2>{{ tk.ticker }}</h2></div>
-        <div class="cards">
+        <div class="cards-vertical">
           {% for rr in tk.runs %}
             <article class="card run-card" data-run="{{ rr.run }}">
               <div class="run-head">
@@ -85,7 +85,7 @@
       </div>
     {% endfor %}
   {% else %}
-    <div class="cards">
+      <div class="cards-vertical">
       {% for r in runs %}
       <article class="card run-card" data-run="{{ r.run }}">
         <div class="run-head">
@@ -115,12 +115,11 @@
           <div class="artifact-list" style="margin-top:8px;">
             {% for a in r.artifacts %}
               <div class="artifact-item">
-                <div class="artifact-left">
+                  <div class="artifact-left">
                   <button class="artifact-name" data-name="{{ a.name }}" data-run="{{ r.run }}" data-ticker="{{ ticker }}" onclick="previewArtifact(this)">{{ a.name }}</button>
                   <div class="artifact-meta">
                     {% if a.detail %}
                       <span class="muted meta-detail" title="{{ a.detail }}">{{ a.detail }}</span>
-                      <button class="btn btn-outline small" data-name="{{ a.name }}" data-run="{{ r.run }}" data-ticker="{{ ticker }}" onclick="toggleDetail(this)">Details</button>
                       <div class="artifact-full-detail muted" style="display:none; margin-top:6px;" data-loaded="false"></div>
                     {% endif %}
                   </div>
@@ -132,6 +131,7 @@
                   </div>
                   <div class="artifact-actions">
                     <button class="btn btn-outline" onclick="previewArtifact(this.closest('.artifact-item').querySelector('.artifact-name'))">Preview</button>
+                    <button class="btn btn-outline" data-name="{{ a.name }}" data-run="{{ r.run }}" data-ticker="{{ ticker }}" onclick="toggleDetail(this)">Details</button>
                     <a class="btn" href="/artifact-download?raw={{ a.name }}&ticker={{ ticker }}" title="Download {{ a.name }}">Download</a>
                   </div>
                 </div>

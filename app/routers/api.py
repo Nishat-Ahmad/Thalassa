@@ -501,6 +501,307 @@ def model_info(request: Request, ticker: str = Query("AAPL"), raw: str | None = 
 
     return legacy_meta
 
+
+@router.get("/cluster-samples")
+def cluster_samples(
+    ticker: str = Query("AAPL"),
+    n: int = Query(3, gt=0, le=20),
+    since: str | None = Query(None),
+    until: str | None = Query(None),
+):
+    """Return up to `n` representative training rows per cluster for a ticker.
+
+    This helps users inspect what each cluster looks like in raw feature space.
+    """
+    t = _safe_ticker(ticker)
+    meta_path, labels_path = cluster_paths(t)
+    if not os.path.exists(meta_path):
+        raise HTTPException(status_code=404, detail="Cluster metadata not found")
+    if not os.path.exists(labels_path):
+        raise HTTPException(status_code=404, detail="Cluster labels not found")
+    meta = _load_json(meta_path) or {}
+    try:
+        labels = np.load(labels_path)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Could not load cluster labels")
+
+    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    if not os.path.exists(feat_path):
+        raise HTTPException(status_code=404, detail="Feature file not found for ticker")
+    try:
+        df = pd.read_parquet(feat_path)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Could not read feature parquet for ticker")
+
+    # normalize date column and apply optional date range filtering (since/until are YYYY-MM-DD)
+    if "date" in df.columns:
+        try:
+            df = df.copy()
+            df["date"] = pd.to_datetime(df["date"], errors="coerce")
+            if since:
+                try:
+                    since_dt = pd.to_datetime(since)
+                    df = df[df["date"] >= since_dt]
+                except Exception:
+                    pass
+            if until:
+                try:
+                    until_dt = pd.to_datetime(until)
+                    df = df[df["date"] <= until_dt]
+                except Exception:
+                    pass
+        except Exception:
+            # if parsing fails, continue without filtering
+            pass
+
+    # Prefer aligning labels by saved row index (dates or original indices) when available.
+    row_index = meta.get("row_index")
+    df_used = None
+    if row_index and isinstance(row_index, (list, tuple)):
+        try:
+            # try matching by date column first
+            if "date" in df.columns:
+                df = df.copy()
+                df["__date_str"] = df["date"].astype(str)
+                labels_df = pd.DataFrame({"__date_str": [str(x) for x in row_index], "cluster_label": labels})
+                df_used = pd.merge(df, labels_df, on="__date_str", how="inner").drop(columns=["__date_str"])\
+                    .reset_index(drop=True)
+            else:
+                # fallback: match on original index string values
+                df_idx = df.reset_index()
+                df_idx["__idx_str"] = df_idx["index"].astype(str)
+                labels_df = pd.DataFrame({"__idx_str": [str(x) for x in row_index], "cluster_label": labels})
+                df_used = pd.merge(df_idx, labels_df, on="__idx_str", how="inner").drop(columns=["__idx_str", "index"])\
+                    .reset_index(drop=True)
+        except Exception:
+            df_used = None
+
+    # fallback: align to the tail if we couldn't align by saved row index
+    if df_used is None:
+        minlen = min(len(labels), len(df))
+        if minlen == 0:
+            return {"ticker": t, "samples": {}}
+        df_used = df.tail(minlen).reset_index(drop=True).copy()
+        labels_trim = labels[-minlen:]
+        df_used["cluster_label"] = labels_trim
+
+    # Prioritize newest rows: if date column exists, sort by date desc; otherwise reverse index order
+    try:
+        if "date" in df_used.columns:
+            df_used["date"] = pd.to_datetime(df_used["date"], errors="coerce")
+            df_used = df_used.sort_values("date", ascending=False).reset_index(drop=True)
+        else:
+            df_used = df_used.sort_index(ascending=False).reset_index(drop=True)
+    except Exception:
+        # ignore sorting errors and proceed
+        pass
+
+    n_clusters = int(meta.get("n_clusters", int(labels.max()) + 1))
+    out = {}
+    for cid in range(n_clusters):
+        sel = df_used[df_used["cluster_label"] == cid].head(n)
+        out[str(cid)] = sel.to_dict(orient="records")
+
+    # include the cluster metadata (centers, feature_order, scaler params) so front-end
+    # visualizations (heatmap / violin) can render without an extra request
+    resp_meta = _sanitize_for_json(meta.copy() if isinstance(meta, dict) else meta) or {}
+    resp_meta["n_clusters"] = n_clusters
+
+    return {"ticker": t, "meta": resp_meta, "samples": out}
+
+
+@router.post("/label-dataset")
+def label_dataset(ticker: str = Query("AAPL")):
+    """Attach cluster labels to the feature dataset and save a labeled copy into a new run directory.
+
+    Returns the path of the saved labeled dataset (parquet if possible, CSV fallback).
+    """
+    t = _safe_ticker(ticker)
+    meta_path, labels_path = cluster_paths(t)
+    if not os.path.exists(meta_path) or not os.path.exists(labels_path):
+        raise HTTPException(status_code=404, detail="Cluster artifacts not found")
+    try:
+        labels = np.load(labels_path)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Could not load cluster labels")
+
+    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    if not os.path.exists(feat_path):
+        raise HTTPException(status_code=404, detail="Feature file not found for ticker")
+    try:
+        df = pd.read_parquet(feat_path)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Could not read feature parquet for ticker")
+
+    minlen = min(len(labels), len(df))
+    if minlen == 0:
+        raise HTTPException(status_code=400, detail="No rows available to label")
+
+    # attach labels to the rows using saved row_index when possible
+    meta = _load_json(meta_path) or {}
+    row_index = meta.get("row_index")
+    if row_index and isinstance(row_index, (list, tuple)):
+        try:
+            if "date" in df.columns:
+                df["date_str_for_label"] = df["date"].astype(str)
+                labels_df = pd.DataFrame({"date_str_for_label": [str(x) for x in row_index], "cluster_label": labels})
+                df_to_label = pd.merge(df, labels_df, on="date_str_for_label", how="inner").drop(columns=["date_str_for_label"]).reset_index(drop=True)
+            else:
+                df_idx = df.reset_index()
+                df_idx["idx_str_for_label"] = df_idx["index"].astype(str)
+                labels_df = pd.DataFrame({"idx_str_for_label": [str(x) for x in row_index], "cluster_label": labels})
+                df_to_label = pd.merge(df_idx, labels_df, on="idx_str_for_label", how="inner").drop(columns=["idx_str_for_label", "index"]).reset_index(drop=True)
+        except Exception:
+            df_to_label = df.tail(minlen).reset_index(drop=True).copy()
+            df_to_label["cluster_label"] = labels[-minlen:]
+    else:
+        # fallback: attach labels to the tail portion corresponding to training rows
+        df_to_label = df.tail(minlen).reset_index(drop=True).copy()
+        df_to_label["cluster_label"] = labels[-minlen:]
+
+    # create a new run directory to store the labeled dataset
+    try:
+        from ..core import ensure_run_dir
+    except Exception:
+        raise HTTPException(status_code=500, detail="Cannot access run dir helper")
+    run_dir = ensure_run_dir(t)
+    out_parquet = os.path.join(run_dir, f"features_labeled_{t}.parquet")
+    out_csv = os.path.join(run_dir, f"features_labeled_{t}.csv")
+    try:
+        df_to_label.to_parquet(out_parquet)
+        saved = out_parquet
+    except Exception:
+        try:
+            df_to_label.to_csv(out_csv, index=False)
+            saved = out_csv
+        except Exception:
+            raise HTTPException(status_code=500, detail="Failed to save labeled dataset")
+
+    return {"status": "ok", "saved_path": saved}
+
+
+@router.get("/cluster-interpret")
+def cluster_interpret(ticker: str = Query("AAPL")):
+    """Return simple semantic labels for clusters using center z-values (centers are in scaled space).
+
+    This uses heuristic rules on common features (return, vol_10, rsi_14, macd, macd_signal)
+    and a top-features list (largest absolute z-values) as reasoning.
+    """
+    t = _safe_ticker(ticker)
+    meta_path, _ = cluster_paths(t)
+    if not os.path.exists(meta_path):
+        raise HTTPException(status_code=404, detail="Cluster metadata not found")
+    meta = _load_json(meta_path) or {}
+    centers = np.array(meta.get("centers", []), dtype=float)
+    feat_order = meta.get("feature_order", []) or []
+    if centers.size == 0 or not feat_order:
+        raise HTTPException(status_code=400, detail="Cluster metadata incomplete")
+
+    # Try to convert centers from scaled space back to original units when scaler params exist
+    scaler_mean = np.array(meta.get("scaler_mean", []) if meta.get("scaler_mean") is not None else [])
+    scaler_scale = np.array(meta.get("scaler_scale", []) if meta.get("scaler_scale") is not None else [])
+    use_orig = False
+    centers_orig = centers.copy()
+    if scaler_mean.size and scaler_scale.size and centers.shape[1] == scaler_mean.size == scaler_scale.size:
+        try:
+            centers_orig = centers * scaler_scale + scaler_mean
+            use_orig = True
+        except Exception:
+            centers_orig = centers.copy()
+
+    # For each feature compute cluster percentile rank across centers (0..1)
+    k = centers_orig.shape[0]
+    feat_vals = {}
+    for j, feat in enumerate(feat_order):
+        vals = centers_orig[:, j]
+        # compute percentile rank for each center value
+        if k > 1:
+            order = np.argsort(vals)
+            ranks = np.empty_like(order, dtype=float)
+            ranks[order] = np.arange(k)
+            ranks = ranks / float(k - 1)
+        else:
+            ranks = np.array([0.5])
+        feat_vals[feat] = {"vals": vals, "ranks": ranks}
+
+    interpretations = {}
+    for idx in range(k):
+        label_parts = []
+        reasons = []
+
+        def finfo(name):
+            if name not in feat_vals:
+                return None, None
+            return float(feat_vals[name]["vals"][idx]), float(feat_vals[name]["ranks"][idx])
+
+        # Heuristic thresholds (percentiles)
+        high_thr = 0.66
+        low_thr = 0.33
+
+        # Returns
+        for ret_name in ("return", "log_return"):
+            v, p = finfo(ret_name)
+            if v is None:
+                continue
+            if p >= high_thr:
+                label_parts.append("Positive Return")
+                reasons.append(f"{ret_name} p{p:.2f} val={v:.4g}{' (orig)' if use_orig else ''}")
+            elif p <= low_thr:
+                label_parts.append("Negative Return")
+                reasons.append(f"{ret_name} p{p:.2f} val={v:.4g}{' (orig)' if use_orig else ''}")
+            break
+
+        # Volatility
+        v, p = finfo("vol_10")
+        if v is not None:
+            if p >= high_thr:
+                label_parts.append("High Volatility")
+                reasons.append(f"vol_10 p{p:.2f} val={v:.4g}")
+            elif p <= low_thr:
+                label_parts.append("Low Volatility")
+                reasons.append(f"vol_10 p{p:.2f} val={v:.4g}")
+
+        # RSI
+        v, p = finfo("rsi_14")
+        if v is not None:
+            if p >= high_thr:
+                label_parts.append("Overbought")
+                reasons.append(f"rsi_14 p{p:.2f} val={v:.4g}")
+            elif p <= low_thr:
+                label_parts.append("Oversold")
+                reasons.append(f"rsi_14 p{p:.2f} val={v:.4g}")
+
+        # MACD
+        v, p = finfo("macd")
+        if v is not None:
+            if p >= high_thr:
+                label_parts.append("Bullish MACD")
+                reasons.append(f"macd p{p:.2f} val={v:.4g}")
+            elif p <= low_thr:
+                label_parts.append("Bearish MACD")
+                reasons.append(f"macd p{p:.2f} val={v:.4g}")
+
+        # Select top features by absolute deviation from median across centers (original units if available)
+        top_idxs = np.argsort(np.abs(centers_orig[:, :] - np.median(centers_orig, axis=0))[idx, :])[::-1][:4]
+        top_feats = []
+        for j in top_idxs:
+            if j < len(feat_order):
+                top_feats.append({"feature": feat_order[j], "value": float(centers_orig[idx, j]), "percentile": float(feat_vals[feat_order[j]]["ranks"][idx])})
+
+        if not label_parts:
+            label = "Neutral"
+        else:
+            # deduplicate while preserving order
+            seen = []
+            for part in label_parts:
+                if part not in seen:
+                    seen.append(part)
+            label = " + ".join(seen)
+
+        interpretations[str(idx)] = {"label": label, "reason": reasons, "top_features": top_feats}
+
+    return {"ticker": t, "interpretations": interpretations, "units": ("original" if use_orig else "scaled")}
+
 @router.get("/expected-features")
 def expected_features(ticker: str = Query("AAPL")):
     t = _safe_ticker(ticker)
@@ -541,9 +842,38 @@ def cluster_info(ticker: str = Query("AAPL")):
         raise HTTPException(status_code=404, detail="Cluster metadata not found")
     with open(meta_path, "r") as f:
         meta = json.load(f)
+
+    # attach latest label if available
+    labels = None
     if os.path.exists(labels_path):
-        labels = np.load(labels_path)
-        meta["latest_label"] = int(labels[-1]) if len(labels) else None
+        try:
+            labels = np.load(labels_path)
+            meta["latest_label"] = int(labels[-1]) if len(labels) else None
+        except Exception:
+            meta["latest_label"] = None
+
+    # diagnostic: how many feature rows exist and how many were used for training
+    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    features_count = None
+    try:
+        if os.path.exists(feat_path):
+            try:
+                df = pd.read_parquet(feat_path)
+                features_count = int(len(df))
+            except Exception:
+                features_count = None
+    except Exception:
+        features_count = None
+
+    # training rows count: prefer explicit row_index saved in meta, fallback to labels length
+    training_count = None
+    if isinstance(meta.get("row_index"), (list, tuple)):
+        training_count = int(len(meta.get("row_index") or []))
+    elif labels is not None:
+        training_count = int(len(labels))
+
+    meta["features_count"] = features_count
+    meta["training_count"] = training_count
     return meta
 
 @router.post("/predict-cluster")

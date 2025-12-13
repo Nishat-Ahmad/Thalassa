@@ -249,42 +249,6 @@
   }
 </script>
 
-<script>
-  // Persist last searched ticker and period locally so the form stays populated when returning.
-  (function() {
-    const KEY = 'finance_search_state';
-    const form = document.getElementById('searchForm');
-    const tickerInput = document.getElementById('tickerInput');
-    const periodSelect = document.getElementById('periodSelect');
-    const searchBtn = document.getElementById('searchBtn');
-
-    const saveState = () => {
-      if (!tickerInput || !periodSelect) return;
-      const state = {
-        ticker: tickerInput.value || '',
-        period: periodSelect.value || '',
-      };
-      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
-    };
-
-    const restoreState = () => {
-      if (!tickerInput || !periodSelect) return;
-      try {
-        const raw = localStorage.getItem(KEY);
-        if (!raw) return;
-        const state = JSON.parse(raw);
-        if (state.ticker) tickerInput.value = state.ticker;
-        if (state.period) periodSelect.value = state.period;
-      } catch (e) {}
-    };
-
-    restoreState();
-    tickerInput && tickerInput.addEventListener('input', saveState);
-    periodSelect && periodSelect.addEventListener('change', saveState);
-    searchBtn && searchBtn.addEventListener('click', saveState);
-    form && form.addEventListener('submit', saveState);
-  })();
-</script>
 
 <script>
   (function(){

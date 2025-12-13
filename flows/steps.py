@@ -236,6 +236,14 @@ def cluster_features(feature_path: str, n_clusters: int = 5, run_dir: str | None
             meta["scaler_scale"] = scaler.scale_.tolist()
         except Exception:
             pass
+    # save the original row dates/indices that were used to fit the model so we can align labels later
+    try:
+        if 'date' in df.columns:
+            meta['row_index'] = df.loc[X.index, 'date'].astype(str).tolist()
+        else:
+            meta['row_index'] = [str(i) for i in X.index.tolist()]
+    except Exception:
+        meta['row_index'] = [str(i) for i in X.index.tolist()]
     with open(os.path.join(target_dir, f"clusters_{ticker}.json"), "w") as f:
         json.dump(meta, f)
     np.save(os.path.join(target_dir, f"cluster_labels_{ticker}.npy"), labels)

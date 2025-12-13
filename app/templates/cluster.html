@@ -1,68 +1,740 @@
 {% extends 'base.html' %}
 {% block content %}
+
 <section class="section-header">
-  <h1>Clustering</h1>
-  <p class="muted">View cluster summary and assign a cluster for a new feature vector.</p>
-  <div class="toolbar">
-    <a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">← Back to ML Tasks</a>
-    <span class="muted">Ticker: <strong>{{ ticker or 'AAPL' }}</strong></span>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div>
+      <h1>Clustering</h1>
+    </div>
+    <div class="toolbar">
+      <a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">← Back to ML Tasks</a>
+      <span class="muted">Ticker: <strong>{{ ticker or 'AAPL' }}</strong></span>
+      <button id="showSamplesBtn" class="btn" style="margin-left:8px">Show Samples</button>
+      <button id="labelDatasetBtn" class="btn btn-outline" style="margin-left:6px">Save Labeled Dataset</button>
+    </div>
   </div>
   {% if error %}
-    <p class="alert">{{ error }}</p>
+    <div class="panel" style="margin-top:12px"><p class="muted">{{ error }}</p></div>
   {% endif %}
 </section>
 
 {% if clusters %}
-<div class="grid">
-  <div class="panel">
+<div class="cards">
+  <div class="card">
     <h3>Summary</h3>
-    <p><strong>Clusters:</strong> {{ clusters.n_clusters }}</p>
-    <p><strong>Inertia:</strong> {{ '%.3f'|format(clusters.inertia) }}</p>
-    <p><strong>Created:</strong> {{ clusters.created_at }}</p>
-    {% if clusters.label_counts %}
-      <p><strong>Label Counts:</strong></p>
-      <code style="display:block;white-space:pre-wrap">{{ clusters.label_counts }}</code>
-    {% endif %}
-    <div class="form-actions" style="margin-top:8px">
+    <p class="primary-value">{{ clusters.n_clusters }} clusters</p>
+    <div class="detail-kv">
+      <div class="detail-row"><div class="detail-key">Inertia</div><div class="detail-val">{{ '%.3f'|format(clusters.inertia) }}</div></div>
+      <div class="detail-row"><div class="detail-key">Created</div><div class="detail-val">{{ clusters.created_at }}</div></div>
+        <div class="detail-row"><div class="detail-key">Feature rows</div><div class="detail-val">{% if clusters.features_count is not none %}{{ clusters.features_count }}{% else %}&mdash;{% endif %}</div></div>
+        <div class="detail-row"><div class="detail-key">Rows used for training</div><div class="detail-val">{% if clusters.training_count is not none %}{{ clusters.training_count }}{% if clusters.features_count %} ({{ '%.1f'|format(100.0 * clusters.training_count / clusters.features_count) }}%){% endif %}{% else %}&mdash;{% endif %}</div></div>
+      {% if clusters.label_counts %}
+        <div class="detail-row"><div class="detail-key">Label counts</div><div class="detail-val detail-array">{{ clusters.label_counts }}</div></div>
+      {% endif %}
+    </div>
+    <div class="form-actions" style="margin-top:10px">
       <a class="btn btn-outline" href="/cluster-info{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Open cluster JSON</a>
     </div>
   </div>
-  <div class="panel">
+
+  <div class="card">
     <h3>Feature Order</h3>
     {% if features %}
-      <p class="muted">Order expected for inputs ({{ features|length }} features total).</p>
-      <code style="display:block;white-space:pre-wrap">{{ features|join(', ') }}</code>
+      <p class="muted">Inputs expected ({{ features|length }} features)</p>
+    
+      <div class="feature-tokens" style="margin-top:8px">
+        {% for f in features %}
+          <span class="feature-chip" title="{{ f }}" data-feature="{{ f }}">{{ tokens.get(f, f[:6]) }}</span>
+        {% endfor %}
+      </div>
+
+      <div id="featureDetail" class="panel" style="display:none; margin-top:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <div id="featureDetailName" style="font-weight:700"></div>
+            <div id="featureDetailDef" class="muted" style="margin-top:6px"></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="featureCopy" class="btn small">Copy</button>
+            <button id="featureClose" class="btn small btn-outline">Close</button>
+          </div>
+        </div>
+      </div>
     {% else %}
       <p class="muted">No feature order available.</p>
     {% endif %}
   </div>
+
+  <div class="card">
+    <h3>Quick Assign</h3>
+    <form action="/cluster" method="post" class="inline-form" style="margin-top:6px">
+      <input type="hidden" name="ticker" value="{{ ticker or '' }}" />
+      <label class="input-label" for="values">Feature values (comma-separated)</label>
+      <div class="input-row">
+        <input id="values" class="modern-input" type="text" name="values" placeholder="Provide {{ features|length }} values in order" required />
+        <button class="btn btn-primary" type="submit">Assign</button>
+      </div>
+      <div style="margin-top:6px"><small class="hint">Order must match the feature list shown above.</small></div>
+    </form>
+  </div>
 </div>
 
-<form action="/cluster" method="post" class="form">
-  <input type="hidden" name="ticker" value="{{ ticker or '' }}" />
-  <div class="form-control">
-    <label for="values">Feature Values (comma-separated)</label>
-    <input id="values" type="text" name="values" placeholder="Provide {{ features|length }} values in the exact order" required />
-    <small class="hint">Order must match the feature list shown above; provide exactly {{ features|length }} values.</small>
+<!-- Container where fetched cluster samples will be rendered -->
+<div id="clusterSamples" class="cards-vertical" style="margin-top:12px; display:none"></div>
+<!-- Interactive visualization: scatter + timeseries (stacked vertically) -->
+<div id="clusterViz" class="cards-vertical" style="margin-top:12px; display:none">
+  <div class="card">
+    <h3>Cluster Scatter</h3>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <label class="input-label" style="margin:0">X:</label>
+      <select id="xFeature" class="modern-input"></select>
+      <label class="input-label" style="margin:0">Y:</label>
+      <select id="yFeature" class="modern-input"></select>
+      <button id="updateScatter" class="btn">Update</button>
+    </div>
+    <div id="scatterDiv" style="width:100%;height:420px;background:#0f1724;border-radius:8px;padding:8px"></div>
   </div>
-  <div class="form-actions">
-    <button class="btn btn-primary" type="submit">Assign Cluster</button>
+  <div class="card">
+    <h3>Sample Time Series</h3>
+    <div id="tsDiv" style="width:100%;height:320px;background:#0f1724;border-radius:8px;padding:8px"></div>
+    <div id="tsNote" class="muted" style="margin-top:8px">Click a point in the scatter to view a small time-series for that sample.</div>
   </div>
-</form>
-
+</div>
+<!-- Analysis: heatmap of centers and violin distributions -->
+<div id="clusterAnalysis" class="cards-vertical" style="margin-top:12px; display:none">
+  <div class="card">
+    <h3>Cluster Centers Heatmap</h3>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <label class="input-label" style="margin:0">Top features:</label>
+      <select id="heatmapTopN" class="modern-input"><option value="6">6</option><option value="8" selected>8</option><option value="12">12</option></select>
+      <button id="updateHeatmap" class="btn">Update</button>
+    </div>
+    <div id="heatmapDiv" style="width:100%;height:360px;background:#0f1724;border-radius:8px;padding:8px"></div>
+  </div>
+  <div class="card">
+    <h3>Feature Distribution by Cluster</h3>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <label class="input-label" style="margin:0">Feature:</label>
+      <select id="violinFeature" class="modern-input"></select>
+      <label class="input-label" style="margin:0">Show samples for:</label>
+      <select id="clusterFilterSelect" class="modern-input"><option value="all">All</option></select>
+      <button id="updateViolin" class="btn">Update</button>
+    </div>
+    <div id="violinDiv" style="width:100%;height:360px;background:#0f1724;border-radius:8px;padding:8px"></div>
+  </div>
+</div>
 {% if result %}
-<section class="panel" style="margin-top:16px">
-  <h3>Result</h3>
-  <p>Assigned Cluster: <strong>{{ result.cluster }}</strong></p>
-  {% if result.distances %}
-    <p>Distances to Centers:</p>
-    <code style="display:block;white-space:pre-wrap">{{ result.distances|map('float')|map('round', 4)|list|join(', ') }}</code>
-  {% endif %}
-  {% if error %}
-    <p class="alert">{{ error }}</p>
-  {% endif %}
+<section class="cards-vertical" style="margin-top:12px">
+  <div class="card">
+    <h3>Result</h3>
+    <p class="primary-value">Assigned Cluster: <strong id="assignedCluster">{{ result.cluster }}</strong>
+      <span id="clusterInterpretLabel" style="margin-left:10px"></span>
+    </p>
+    {% if result.distances %}
+      <div style="margin-top:8px">
+        <div class="muted" style="margin-bottom:6px">Distances to centers</div>
+        <div class="detail-chips">
+          {% for d in result.distances %}
+            <div class="detail-chip"><div class="chip-key">C{{ loop.index0 }}</div><div class="chip-val">{{ '%.4f'|format(d) }}</div></div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+    {% if error %}
+      <p class="alert">{{ error }}</p>
+    {% endif %}
+  </div>
 </section>
 {% endif %}
+
+{% else %}
+<div class="pa  nel">
+  <p class="muted">No clustering artifacts are available for this ticker yet. Run the ML pipeline to generate clusters.</p>
+  <div class="form-actions" style="margin-top:10px">
+    <a class="btn btn-primary" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">Run ML Tasks</a>
+  </div>
+</div>
 {% endif %}
 
+{# Interpretation glossary placed at the bottom of the content block so it renders inside the page body #}
+<div class="panel" style="margin-top:18px;">
+  <h3>Cluster Interpretation Glossary</h3>
+  <div class="glossary-list" style="margin-top:8px">
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Overbought</span><span class="caret">▸</span></button>
+      <div class="glossary-body">Prices have risen quickly recently (often shown by indicators like RSI &gt; ~70). This can mean a short-term pullback is more likely, but it's not a definite sell signal.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Oversold</span><span class="caret">▸</span></button>
+      <div class="glossary-body">Prices have fallen quickly recently (often shown by indicators like RSI &lt; ~30). This can mean the price might bounce back soon, but it's not a guaranteed buy signal.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Positive Return</span><span class="caret">▸</span></button>
+      <div class="glossary-body">On average, prices in this cluster went up over the period compared to other clusters.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Negative Return</span><span class="caret">▸</span></button>
+      <div class="glossary-body">On average, prices in this cluster fell over the period compared to other clusters.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>High Volatility</span><span class="caret">▸</span></button>
+      <div class="glossary-body">Prices in this cluster moved up and down a lot (big swings). That means more risk and less predictability in the short term.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Low Volatility</span><span class="caret">▸</span></button>
+      <div class="glossary-body">Prices in this cluster change slowly and smoothly with smaller daily moves. This usually means lower short-term risk.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Bullish MACD</span><span class="caret">▸</span></button>
+      <div class="glossary-body">A technical indicator (MACD) suggests upward momentum: the MACD line is above its signal line, which often accompanies rising prices.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Bearish MACD</span><span class="caret">▸</span></button>
+      <div class="glossary-body">MACD indicates downward momentum: the MACD line is below its signal line, which often appears when prices are falling.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>How to read a composite label</span><span class="caret">▸</span></button>
+      <div class="glossary-body">A composite label combines simple terms above. Example: "Negative Return + High Volatility + Oversold" means prices fell, had big swings, and indicators show oversold — it's a plain-language summary, not trading advice.</div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
+{% block scripts %}
+{{ super() }}
+<script>
+  (function(){
+    const ticker = "{{ ticker or 'AAPL' }}";
+    const showBtn = document.getElementById('showSamplesBtn');
+    const labelBtn = document.getElementById('labelDatasetBtn');
+    const samplesContainer = document.getElementById('clusterSamples');
+
+    function renderSamples(payload){
+      samplesContainer.innerHTML = '';
+      const meta = payload.meta || {};
+      const samples = payload.samples || {};
+      const title = document.createElement('div');
+      title.className = 'section-header';
+      title.innerHTML = `<h2>Cluster Samples</h2><p class="muted"></p>`;
+      samplesContainer.appendChild(title);
+
+      for(const cid of Object.keys(samples).sort((a,b)=>Number(a)-Number(b))){
+        const card = document.createElement('div');
+        card.className = 'card';
+        const header = document.createElement('h3'); header.textContent = `Cluster ${cid}`;
+        // if we have an interpretation label, show it inline
+        try{
+          const interp = window.__cluster_interpret && window.__cluster_interpret[cid];
+          if(interp && interp.label){
+            const lbl = document.createElement('span'); lbl.className = 'badge'; lbl.style.marginLeft = '10px'; lbl.textContent = interp.label;
+            header.appendChild(lbl);
+          }
+        }catch(e){}
+        card.appendChild(header);
+        const items = samples[cid] || [];
+        if(!items.length){
+          const p = document.createElement('p'); p.className='muted'; p.textContent = 'No examples available (in the previous 3 month)'; card.appendChild(p);
+        } else {
+          items.forEach((it, idx) => {
+            const sampleRow = document.createElement('div');
+            sampleRow.className = 'sample-row';
+
+            // find a date-like field or fallback to index
+            let dateText = null;
+            if(it == null) it = {};
+            const keys = Object.keys(it || {});
+            const candidates = ['Date','date','date_str','timestamp','created_at'];
+            for(const c of candidates){ if(it[c]) { dateText = it[c]; break; } }
+            if(!dateText){
+              // try to detect an ISO-style date value
+              for(const k of keys){ const v = it[k] && String(it[k]); if(/\d{4}-\d{2}-\d{2}/.test(v)) { dateText = v; break; } }
+            }
+            if(!dateText) dateText = `Sample ${idx+1}`;
+
+            const header = document.createElement('div'); header.className = 'sample-header';
+            const title = document.createElement('div'); title.className = 'sample-title'; title.textContent = dateText;
+            const caret = document.createElement('div'); caret.className = 'sample-caret'; caret.innerHTML = '▸';
+            header.appendChild(title); header.appendChild(caret);
+
+            const details = document.createElement('div'); details.className = 'sample-details';
+            const pre = document.createElement('pre'); pre.className = 'detail-array';
+            try { pre.textContent = JSON.stringify(it, null, 2); } catch(e){ pre.textContent = String(it); }
+            pre.style.padding = '8px'; pre.style.borderRadius = '8px'; pre.style.background = 'rgba(255,255,255,0.02)'; pre.style.overflowX = 'auto';
+            details.appendChild(pre);
+
+            // wire toggle
+            header.addEventListener('click', () => {
+              const shown = details.style.display && details.style.display !== 'none';
+              if(shown){ details.style.display = 'none'; caret.style.transform = ''; }
+              else { details.style.display = ''; caret.style.transform = 'rotate(90deg)'; }
+            });
+
+            // start collapsed
+            details.style.display = 'none';
+            sampleRow.appendChild(header);
+            sampleRow.appendChild(details);
+            card.appendChild(sampleRow);
+          });
+        }
+        samplesContainer.appendChild(card);
+      }
+      samplesContainer.style.display = '';
+      samplesContainer.scrollIntoView({behavior:'smooth'});
+    }
+
+    async function fetchSamples(){
+      if(!showBtn) return;
+      showBtn.disabled = true; showBtn.textContent = 'Loading...';
+      try{
+        // request samples from the previous 3 calendar months (prioritize newest)
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+        const end = new Date(now.getFullYear(), now.getMonth(), 0);
+        const since = start.toISOString().slice(0,10);
+        const until = end.toISOString().slice(0,10);
+        const q = new URLSearchParams({ticker: ticker, n: '5', since: since, until: until}).toString();
+        const res = await fetch(`/cluster-samples?${q}`);
+        if(!res.ok) throw new Error('Failed to load samples: '+res.statusText);
+        const payload = await res.json();
+        // fetch interpretations in parallel and stash for rendering
+        try{
+          const itres = await fetch(`/cluster-interpret?ticker=${encodeURIComponent(ticker)}`);
+          if(itres.ok){
+            const itpayload = await itres.json();
+            window.__cluster_interpret = itpayload.interpretations || {};
+          } else {
+            window.__cluster_interpret = {};
+          }
+        }catch(e){ window.__cluster_interpret = {}; }
+        renderSamples(payload);
+        try{ initVizFromPayload(payload); }catch(e){ console.warn('viz init failed', e); }
+      }catch(e){
+        alert('Could not fetch cluster samples: '+e.message);
+      }finally{ showBtn.disabled = false; showBtn.textContent = 'Show Samples'; }
+    }
+
+    // Visualization utilities: scatter (feature vs feature) and small time-series for clicked sample
+    function initVizFromPayload(payload){
+      const featList = Array.isArray({{ features|tojson }}) ? {{ features|tojson }} : [];
+      const samplesByCluster = payload.samples || {};
+      const flat = [];
+      Object.keys(samplesByCluster).forEach(cid => {
+        (samplesByCluster[cid] || []).forEach(s => { s.__cluster = cid; flat.push(s); });
+      });
+      // stash last payload for filtering and additional charts
+      window.__last_samples_payload = payload;
+      if(!flat.length) { document.getElementById('clusterViz').style.display=''; return; }
+
+      const xSel = document.getElementById('xFeature');
+      const ySel = document.getElementById('yFeature');
+      xSel.innerHTML = '';
+      ySel.innerHTML = '';
+      featList.forEach(f => {
+        const o1 = document.createElement('option'); o1.value = f; o1.textContent = f; xSel.appendChild(o1);
+        const o2 = document.createElement('option'); o2.value = f; o2.textContent = f; ySel.appendChild(o2);
+      });
+      if(featList.length>=2){ xSel.value = featList[0]; ySel.value = featList[1]; }
+
+      document.getElementById('updateScatter').addEventListener('click', ()=> renderScatter(flat, payload.meta));
+      // initial render
+      document.getElementById('clusterViz').style.display='';
+      // ensure analysis panels are visible
+      const analysisEl = document.getElementById('clusterAnalysis'); if(analysisEl) analysisEl.style.display='';
+      renderScatter(flat, payload.meta);
+      // render heatmap and violin charts
+      try{ renderCentersHeatmap(payload.meta); }catch(e){ console.warn('heatmap failed', e); }
+      try{ renderViolinChart(flat, payload.meta); }catch(e){ console.warn('violin failed', e); }
+    }
+
+    // Render heatmap of centers (percentiles across clusters) and pick top-N features by variance
+    async function renderCentersHeatmap(meta){
+      if(!meta) return;
+      const centers = Array.isArray(meta.centers) ? meta.centers : (meta.centers || []);
+      const features = Array.isArray(meta.feature_order) ? meta.feature_order : ({{ features|tojson }} || []);
+      if(!centers.length || !features.length) { document.getElementById('heatmapDiv').innerHTML = '<div class="muted">No center data available.</div>'; return; }
+      // unscale centers if scaler info present
+      const mean = Array.isArray(meta.scaler_mean) ? meta.scaler_mean : null;
+      const scale = Array.isArray(meta.scaler_scale) ? meta.scaler_scale : null;
+      const centersOrig = centers.map(row => row.map((v,i)=> {
+        const num = Number(v);
+        if(mean && scale && mean.length>i && scale.length>i){ return num * Number(scale[i]) + Number(mean[i]); }
+        return num;
+      }));
+      // compute variance per feature across centers
+      const nFeat = features.length; const nCluster = centersOrig.length;
+      const variances = [];
+      for(let j=0;j<nFeat;j++){ const col = centersOrig.map(r=>r[j] || 0); const m = col.reduce((a,b)=>a+b,0)/col.length; const v = col.reduce((a,b)=> a + Math.pow((b-m),2), 0)/col.length; variances.push({idx:j,var:v}); }
+      variances.sort((a,b)=>b.var - a.var);
+      const topN = Number(document.getElementById('heatmapTopN').value || 8);
+      const chosen = variances.slice(0, Math.min(topN, variances.length)).map(x=>x.idx);
+      const xLabels = chosen.map(i=> features[i] );
+      const yLabels = centersOrig.map((_,i)=> 'C'+i);
+      // compute percentile rank per feature
+      const z = centersOrig.map(row => chosen.map(i => row[i]));
+      // convert columns to percentiles 0-100
+      const zPerc = z.map(r => r.slice());
+      for(let c=0;c<chosen.length;c++){
+        const col = centersOrig.map(r=> r[chosen[c]]);
+        const sorted = col.slice().sort((a,b)=>a-b);
+        for(let i=0;i<col.length;i++){ const v = col[i]; const rank = sorted.indexOf(v); const p = (rank / (sorted.length-1 || 1)) * 100; zPerc[i][c] = Math.round(p*10)/10; }
+      }
+
+      const traces = [{ z: zPerc, x: xLabels, y: yLabels, type: 'heatmap', colorscale: 'RdYlBu', reversescale:true, colorbar:{title:'Percentile'} }];
+      const loadPlotly = () => { if(window.Plotly) return Promise.resolve(); return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.plot.ly/plotly-2.24.1.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); };
+      loadPlotly().then(()=>{
+        const layout = {
+          template:'plotly_dark',
+          margin:{l:120,r:10,t:30,b:120},
+          xaxis:{tickangle:-45, tickfont:{color:'#ffffff'}, title:{font:{color:'#ffffff'}}},
+          yaxis:{autorange:'reversed', tickfont:{color:'#ffffff'}, title:{font:{color:'#ffffff'}}},
+          font:{color:'#ffffff'},
+          plot_bgcolor:'rgba(0,0,0,0)',
+          paper_bgcolor:'rgba(0,0,0,0)',
+          hoverlabel:{bgcolor:'rgba(0,0,0,0.8)', font:{color:'#ffffff'}}
+        };
+        Plotly.newPlot('heatmapDiv', traces, layout, {responsive:true,displayModeBar:false});
+      }).catch(e=>{ console.warn('plotly heatmap load failed', e); });
+      // wire update button
+      document.getElementById('updateHeatmap').onclick = ()=> renderCentersHeatmap(meta);
+    }
+
+    // Render violin distributions by cluster for a chosen feature
+    async function renderViolinChart(flatSamples, meta){
+      const features = Array.isArray(meta.feature_order) ? meta.feature_order : ({{ features|tojson }} || []);
+      const featSelect = document.getElementById('violinFeature');
+      featSelect.innerHTML = '';
+      features.forEach(f=>{ const o=document.createElement('option'); o.value=f; o.textContent=f; featSelect.appendChild(o); });
+      if(features.length) featSelect.value = features[0];
+      const clusterSelect = document.getElementById('clusterFilterSelect');
+      clusterSelect.innerHTML = '<option value="all">All</option>';
+      // prefer to populate clusters from metadata (so empty clusters still appear)
+      const clusters = [];
+      try{
+        const n = meta && (meta.n_clusters || meta.n_clusters === 0 ? Number(meta.n_clusters) : null);
+        if(Number.isInteger(n) && n > 0){ for(let i=0;i<n;i++){ clusters.push(String(i)); } }
+        else { clusters.push(...new Set(flatSamples.map(s=> String(s.__cluster)))); }
+      }catch(e){ clusters.push(...new Set(flatSamples.map(s=> String(s.__cluster)))); }
+      clusters.sort((a,b)=>Number(a)-Number(b));
+      clusters.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent='C'+c; clusterSelect.appendChild(o); });
+      function doRender(){
+        const feat = featSelect.value; if(!feat) return;
+        const groups = {};
+        flatSamples.forEach((s,idx)=>{ const v = Number(s[feat]); if(!isFinite(v)) return; const k = String(s.__cluster||'0'); groups[k] = groups[k] || []; groups[k].push({val:v, idx: idx, sample: s}); });
+        const palette = ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#17becf','#bcbd22','#7f7f7f'];
+        const clusterKeys = Object.keys(groups).sort((a,b)=>Number(a)-Number(b));
+        const clusterLabels = clusterKeys.map(k=> 'C'+k);
+        const positions = clusterKeys.map((_,i)=> i);
+        const traces = clusterKeys.map((k,i)=>{
+          const color = palette[i % palette.length];
+          const pos = positions[i];
+          return {
+            type:'violin',
+            x: Array(groups[k].length).fill(pos),
+            y: groups[k].map(x=>x.val),
+            name:'C'+k,
+            box:{visible:true, fillcolor:'rgba(255,255,255,0.06)'},
+            meanline:{visible:true, width:2, color:'#ffffff'},
+            points:'outliers',
+            pointpos:0,
+            spanmode:'hard',
+            side:'both',
+            width:0.6,
+            marker:{color:color, opacity:0.9, line:{width:0.5, color:'rgba(0,0,0,0.2)'}},
+            hovertemplate: '%{text}<br>' + feat + ': %{y:.4f}<extra></extra>',
+            text: groups[k].map(x=> (x.sample.date||x.sample.Date||'') + ' — idx:'+x.idx)
+          };
+        });
+        const loadPlotly = () => { if(window.Plotly) return Promise.resolve(); return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.plot.ly/plotly-2.24.1.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); };
+        loadPlotly().then(()=>{
+          // determine cluster order for x-axis (ensure consistent ordering even for empty clusters)
+          const clusterOrder = Object.keys(groups).sort((a,b)=>Number(a)-Number(b)).map(k=> 'C'+k);
+          const layout = {
+            template:'plotly_dark',
+            // keep left/right margins balanced so plot is visually centered
+            margin:{l:56,r:56,t:72,b:48},
+            yaxis:{title: {text: feat, font:{color:'#ffffff'}}, gridcolor:'rgba(255,255,255,0.03)', tickfont:{color:'#ffffff'}},
+            xaxis:{title:{text:'Cluster', font:{color:'#ffffff'}, standoff:8}, tickfont:{color:'#ffffff'}, automargin:true, tickmode:'array', tickvals: positions, ticktext: clusterLabels},
+            showlegend:true,
+            violinmode:'group',
+            font:{color:'#ffffff', family:'Inter, Roboto, system-ui, Arial'},
+            hoverlabel:{bgcolor:'rgba(0,0,0,0.8)', font:{color:'#ffffff'}},
+            plot_bgcolor:'rgba(0,0,0,0)',
+            paper_bgcolor:'rgba(0,0,0,0)',
+            legend: {
+              orientation: 'h',
+              x: 0.5,
+              y: 1.18,
+              xanchor: 'center',
+              bordercolor: 'rgba(255,255,255,0.06)',
+              borderwidth: 1,
+              bgcolor: 'rgba(255,255,255,0.02)',
+              font: { color: '#ffffff', size: 12 }
+            }
+          };
+          Plotly.newPlot('violinDiv', traces, layout, {responsive:true,displayModeBar:false});
+          // clicking a violin point will fire plotly_click and we will filter samples list by cluster
+          const violinEl = document.getElementById('violinDiv');
+          violinEl.on('plotly_click', function(data){ try{ const pt = data.points && data.points[0]; if(!pt) return; const clusterName = pt.x; const clusterIdx = clusterName.replace(/^C/,''); filterSamplesByCluster(clusterIdx); }catch(e){console.warn(e);} });
+        }).catch(e=>console.warn('plotly violin load failed', e));
+      }
+      document.getElementById('updateViolin').onclick = doRender;
+      document.getElementById('clusterFilterSelect').onchange = function(){ const v=this.value; if(v==='all') renderSamples(window.__last_samples_payload || {samples:{}}); else filterSamplesByCluster(v); };
+      doRender();
+    }
+
+    function filterSamplesByCluster(clusterIdx){
+      const payload = window.__last_samples_payload || {samples:{}};
+      const samples = payload.samples || {};
+      const filtered = {};
+      filtered[clusterIdx] = samples[clusterIdx] || [];
+      const temp = { meta: payload.meta, samples: filtered };
+      renderSamples(temp);
+      document.getElementById('clusterAnalysis').style.display = '';
+      document.getElementById('clusterViz').style.display = '';
+    }
+
+    function renderScatter(flatSamples, meta){
+      const xKey = document.getElementById('xFeature').value;
+      const yKey = document.getElementById('yFeature').value;
+      const x = []; const y = []; const colors = []; const texts = []; const custom = [];
+      flatSamples.forEach((s, idx) => {
+        const xv = Number(s[xKey]); const yv = Number(s[yKey]);
+        x.push(isFinite(xv)?xv:null); y.push(isFinite(yv)?yv:null);
+        colors.push(s.__cluster || '0');
+        const label = s.date || s.Date || s.date_str || (`sample ${idx+1}`);
+        texts.push(`${label} — cluster ${s.__cluster}`);
+        custom.push(idx);
+      });
+
+      // determine full list of clusters from metadata if available, otherwise infer from data
+      let clusters = [];
+      try{
+        const n = meta && (meta.n_clusters || meta.n_clusters === 0 ? Number(meta.n_clusters) : null);
+        if(Number.isInteger(n) && n > 0){ clusters = Array.from({length:n}, (_,i)=> String(i)); }
+        else { clusters = [...new Set(colors)]; }
+      }catch(e){ clusters = [...new Set(colors)]; }
+      clusters = clusters.sort((a,b)=>Number(a)-Number(b));
+      const traces = clusters.map(c => {
+        const xi = []; const yi = []; const ti = []; const ci = [];
+        for(let i=0;i<colors.length;i++){ if(String(colors[i])===String(c)){ xi.push(x[i]); yi.push(y[i]); ti.push(texts[i]); ci.push(custom[i]); } }
+        return { x: xi, y: yi, mode:'markers', type:'scattergl', name:'C'+c, text: ti, marker:{size:8}, customdata: ci };
+      });
+
+      // lazy load Plotly if not present
+      const loadPlotly = () => {
+        if(window.Plotly) return Promise.resolve();
+        return new Promise((resolve, reject)=>{
+          const s = document.createElement('script'); s.src='https://cdn.plot.ly/plotly-2.24.1.min.js'; s.onload = resolve; s.onerror=reject; document.head.appendChild(s);
+        });
+      };
+
+      loadPlotly().then(()=>{
+        // modern color palette (distinct categorical colors)
+        const palette = ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
+        traces.forEach((tr,i)=>{
+          tr.marker = tr.marker || {};
+          tr.marker.color = palette[i % palette.length];
+          tr.marker.size = 10;
+          tr.marker.opacity = 0.92;
+          tr.marker.line = { width: 1, color: 'rgba(255,255,255,0.06)' };
+          tr.mode = 'markers';
+          tr.type = 'scattergl';
+          tr.hovertemplate = '%{text}<br>' + xKey + ': %{x:.4f}<br>' + yKey + ': %{y:.4f}<extra></extra>';
+        });
+
+        const layout = {
+          template: 'plotly_dark',
+          margin:{l:48,r:12,t:36,b:44},
+          hovermode:'closest',
+          xaxis:{title: xKey, gridcolor:'rgba(255,255,255,0.04)', tickfont:{color:'#ffffff'}, title:{font:{color:'#ffffff'}}},
+          yaxis:{title: yKey, gridcolor:'rgba(255,255,255,0.04)', tickfont:{color:'#ffffff'}, title:{font:{color:'#ffffff'}}},
+          legend:{orientation:'h',y:1.08,x:0.5,xanchor:'center',font:{size:12,color:'#ffffff'}},
+          plot_bgcolor:'rgba(0,0,0,0)',
+          paper_bgcolor:'rgba(0,0,0,0)',
+          hoverlabel: { bgcolor: 'rgba(0,0,0,0.8)', font: { color: '#ffffff' }, bordercolor: 'rgba(255,255,255,0.06)' },
+          font: { family: 'Inter, Roboto, system-ui, Arial', size: 13, color:'#ffffff' }
+        };
+
+        Plotly.newPlot('scatterDiv', traces, layout, {responsive:true, displayModeBar:true});
+        const scatter = document.getElementById('scatterDiv');
+        scatter.on('plotly_click', function(data){
+          try{
+            const point = data.points && data.points[0];
+            if(!point) return;
+            const idx = point.customdata;
+            const sample = flatSamples[idx];
+            renderTimeSeries(sample);
+          }catch(e){console.warn(e)}
+        });
+      }).catch(e=>console.warn('Failed to load Plotly', e));
+    }
+
+    function renderTimeSeries(sample){
+      // build a simple backward-looking series from lag_close_* fields if available
+      const keys = Object.keys(sample||{});
+      const lagKeys = keys.filter(k => /^lag_close_\d+$/.test(k)).sort((a,b)=>{ return Number(a.split('_').pop())-Number(b.split('_').pop()); });
+      const series = [];
+      if(lagKeys.length){
+        lagKeys.forEach(k=> series.push(Number(sample[k]) || null));
+        // push the current Close if present
+        if(sample.Close) series.push(Number(sample.Close));
+        const x = Array.from({length:series.length}, (_,i)=> i - (series.length-1));
+        const y = series;
+        loadAndPlotTS(x,y, sample.date || sample.Date || '');
+      } else if(sample.Close){
+        loadAndPlotTS([0],[Number(sample.Close)||null], sample.date||sample.Date||'');
+      } else {
+        document.getElementById('tsDiv').innerHTML = '<div class="muted">No time-series data available for this sample.</div>';
+      }
+
+      function loadAndPlotTS(x,y,title){
+        const ensurePlotly = () => {
+          if(window.Plotly) return Promise.resolve();
+          return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.plot.ly/plotly-2.24.1.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+        };
+        ensurePlotly().then(()=>{
+          const trace = { x: x, y: y, mode:'lines+markers', type:'scatter', line:{color:'#17becf',width:2}, marker:{color:'#17becf',size:6} };
+          const layout = {
+            template:'plotly_dark',
+            margin:{l:48,r:10,t:36,b:56},
+            title: title,
+            xaxis: { title: { text: 'period (relative)', standoff: 8, font: { color: '#ffffff' } }, tickfont:{color:'#ffffff'}, automargin:true },
+            yaxis: { title: { text: 'Price', standoff: 8, font: { color: '#ffffff' } }, tickfont:{color:'#ffffff'}, automargin:true },
+            plot_bgcolor:'rgba(0,0,0,0)',
+            paper_bgcolor:'rgba(0,0,0,0)',
+            font:{family:'Inter, Roboto, system-ui, Arial', size:13, color:'#ffffff'},
+            hoverlabel:{bgcolor:'rgba(0,0,0,0.8)', font:{color:'#ffffff'}}
+          };
+          Plotly.newPlot('tsDiv', [trace], layout, {responsive:true, displayModeBar:false});
+        }).catch(e=>console.warn('Plotly load failed', e));
+      }
+    }
+
+    async function labelDataset(){
+      if(!labelBtn) return;
+      if(!confirm('This will create a new run directory and save a labeled copy of the features. Continue?')) return;
+      labelBtn.disabled = true; const prev = labelBtn.textContent; labelBtn.textContent = 'Saving...';
+      try{
+        const res = await fetch(`/label-dataset?ticker=${encodeURIComponent(ticker)}`, {method: 'POST'});
+        if(!res.ok){
+          const err = await res.json().catch(()=>({detail: 'unknown error'}));
+          throw new Error(err.detail || res.statusText);
+        }
+        const out = await res.json();
+        const panel = document.createElement('div'); panel.className='panel';
+        panel.innerHTML = `<p class="muted">Saved labeled dataset: <strong>${out.saved_path}</strong></p>`;
+        document.querySelector('.content')?.insertBefore(panel, document.querySelector('.content').firstChild);
+      }catch(e){
+        alert('Failed to save labeled dataset: '+e.message);
+      }finally{ labelBtn.disabled = false; labelBtn.textContent = prev; }
+    }
+
+    if(showBtn) showBtn.addEventListener('click', fetchSamples);
+    if(labelBtn) labelBtn.addEventListener('click', labelDataset);
+    
+    // Feature token click -> show definition
+    try{
+      const defs = {
+        'Close': 'Last traded price at market close for the period — the primary price reference used for returns and indicators.',
+        'High': 'Highest traded price during the session — useful for range analysis and intraday volatility.',
+        'Low': 'Lowest traded price during the session — useful for support/range analysis.',
+        'Open': 'First traded price at session open — used to detect gap moves versus previous close.',
+        'Volume': 'Total traded shares in the period — liquidity measure used to confirm price moves and volume-weighted signals.',
+        'return': 'Arithmetic return for the period: (Close / previous Close − 1). Captures directional percent change.',
+        'log_return': 'Natural-log return: ln(Close / previous Close). Additive over time and preferable for some statistical models.',
+        'sma_5': '5-period simple moving average of Close — short-term trend baseline (price units).',
+        'ema_5': '5-period exponential moving average — short-term trend that weights recent closes more heavily than SMA.',
+        'sma_10': '10-period simple moving average — short-to-intermediate trend reference.',
+        'ema_10': '10-period exponential moving average — responds faster than SMA10 to recent price moves.',
+        'sma_20': '20-period simple moving average — commonly used for intermediate trend filtering.',
+        'ema_20': '20-period exponential moving average — intermediate trend indicator with recency bias.',
+        'vol_10': 'Rolling realized volatility: standard deviation of returns over 10 periods — a short-term risk/volatility proxy.',
+        'rsi_14': 'Relative Strength Index over 14 periods (0–100): momentum oscillator used for overbought/oversold context and divergence.',
+        'macd': 'MACD line (typically 12-EMA minus 26-EMA) — momentum/trend indicator in price units.',
+        'macd_signal': 'MACD signal line (usually a 9-EMA of MACD) — used for crossover signals and trend smoothing.',
+        'macd_hist': 'MACD histogram = MACD − signal — positive values indicate MACD above signal (rising bullish momentum).',
+        'lag_close_1': 'Close price one period prior — preserves raw lagged price information for temporal patterns.',
+        'lag_return_1': 'Return one period prior — recent return used to capture short-term momentum or mean-reversion.',
+        'lag_close_2': 'Close price two periods prior — additional temporal context.',
+        'lag_return_2': 'Return two periods prior — historical return signal at lag 2.',
+        'lag_close_3': 'Close price three periods prior — extended short-term context.',
+        'lag_return_3': 'Return three periods prior — captures slightly older momentum effects.',
+        'lag_close_5': 'Close price five periods prior — useful for weekly-style comparisons in daily data.',
+        'lag_return_5': 'Return five periods prior — longer short-term return used to capture recent trend persistence.'
+      };
+
+      const chips = Array.from(document.querySelectorAll('.feature-chip'));
+      const panel = document.getElementById('featureDetail');
+      const pName = document.getElementById('featureDetailName');
+      const pDef = document.getElementById('featureDetailDef');
+      const btnClose = document.getElementById('featureClose');
+      const btnCopy = document.getElementById('featureCopy');
+
+      chips.forEach(ch => ch.addEventListener('click', (e) => {
+        const feat = ch.getAttribute('data-feature') || ch.title || ch.textContent;
+        pName.textContent = feat;
+        pDef.textContent = defs[feat] || 'No definition available.';
+        panel.style.display = '';
+        // scroll into view if needed
+        panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+      }));
+
+      btnClose && btnClose.addEventListener('click', ()=>{ if(panel) panel.style.display='none'; });
+      btnCopy && btnCopy.addEventListener('click', ()=>{
+        const text = pName.textContent + ' — ' + pDef.textContent;
+        navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : null;
+        btnCopy.textContent = 'Copied';
+        setTimeout(()=> btnCopy.textContent = 'Copy', 1200);
+      });
+    }catch(e){ console.warn('feature token init failed', e); }
+    
+    // If the server returned an assignment result (from Quick Assign), fetch and show interpretation
+    try{
+      {% if result %}
+      const __initialResult = {{ result|tojson }};
+      (async ()=>{
+        try{
+          const r = await fetch(`/cluster-interpret?ticker=${encodeURIComponent(ticker)}`);
+          if(!r.ok) return;
+          const payload = await r.json();
+          const interp = (payload && payload.interpretations) ? payload.interpretations[String(__initialResult.cluster)] : null;
+          if(interp && interp.label){
+            const el = document.getElementById('clusterInterpretLabel');
+            if(el){ el.innerHTML = `<span class="badge">${interp.label}</span>`; }
+          }
+        }catch(e){ /* ignore */ }
+      })();
+      {% endif %}
+    }catch(e){/* ignore */}
+    
+      // Glossary collapsible toggles
+      try{
+        const toggles = Array.from(document.querySelectorAll('.glossary-toggle'));
+        toggles.forEach(btn => {
+          btn.addEventListener('click', ()=>{
+            const entry = btn.closest('.glossary-entry');
+            if(!entry) return;
+            const expanded = entry.classList.toggle('expanded');
+            btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+          });
+        });
+      }catch(e){/* ignore */}
+  })();
+</script>
+{% endblock %}
+
+{# Interpretation glossary placed at the very bottom of the page. Kept independent from other elements. #}
+<div class="panel" style="margin-top:18px;">
+  <h3>Cluster Interpretation Glossary</h3>
+  <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+    <div><strong>Overbought</strong>: Oscillator-based condition (e.g., RSI &gt; ~70) indicating the instrument has risen rapidly and may be due for a pullback; used as short‑term context, not a standalone sell signal.</div>
+    <div><strong>Oversold</strong>: Oscillator-based condition (e.g., RSI &lt; ~30) indicating the instrument has fallen quickly and may present mean-reversion potential; used as short‑term context.</div>
+    <div><strong>Positive Return</strong>: The cluster's center shows returns above other clusters (higher percentile) — indicates net upward movement over the base period.</div>
+    <div><strong>Negative Return</strong>: The cluster's center shows returns below other clusters (lower percentile) — indicates net downward movement over the base period.</div>
+    <div><strong>High Volatility</strong>: The cluster's center has relatively large realized volatility (e.g., higher rolling std of returns) — price moves are larger and less predictable.</div>
+    <div><strong>Low Volatility</strong>: The cluster's center shows relatively small realized volatility — price moves are smaller and generally quieter.</div>
+    <div><strong>Bullish MACD</strong>: MACD line is above its signal (positive histogram or MACD &gt; signal) — momentum skewed to the upside at the center.</div>
+    <div><strong>Bearish MACD</strong>: MACD line is below its signal (negative histogram or MACD &lt; signal) — momentum skewed to the downside at the center.</div>
+    <div><strong>How to read a composite label</strong>: Labels combine signals; e.g. <em>"Negative Return + High Volatility + Oversold"</em> means the cluster center shows below‑average returns, above‑average volatility, and low oscillator values. These are heuristics to help interpret cluster behavior, not trade rules.</div>
+  </div>
+</div>

@@ -36,6 +36,15 @@ def fit_clusters(df: pd.DataFrame, n_clusters: int) -> tuple[dict, np.ndarray]:
         c for c in df.columns if c not in ["date", "ticker"] and pd.api.types.is_numeric_dtype(df[c])
     ]
     X = df[feature_cols].replace([np.inf, -np.inf], np.nan).dropna()
+    # capture the original row dates/indices used for training so we can align labels back
+    row_index = None
+    if 'date' in df.columns:
+        try:
+            row_index = df.loc[X.index, 'date'].astype(str).tolist()
+        except Exception:
+            row_index = [str(i) for i in X.index.tolist()]
+    else:
+        row_index = [str(i) for i in X.index.tolist()]
     if len(X) < n_clusters:
         raise ValueError("Insufficient rows to fit KMeans with the requested cluster count")
 
@@ -54,6 +63,7 @@ def fit_clusters(df: pd.DataFrame, n_clusters: int) -> tuple[dict, np.ndarray]:
         "label_counts": {int(k): int(v) for k, v in zip(*np.unique(labels, return_counts=True))},
         "scaler_mean": scaler.mean_.tolist(),
         "scaler_scale": scaler.scale_.tolist(),
+        "row_index": row_index,
     }
     return meta, labels
 

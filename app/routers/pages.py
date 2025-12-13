@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse
-import os, json, math, numpy as np, datetime
+import os, json, math, numpy as np, datetime, re
 import pandas as pd
 import yfinance as yf
 from ..core import (
@@ -279,6 +279,50 @@ def cluster_page(request: Request, ticker: str | None = None):
     else:
         error = "Cluster metadata not found. Run the pipeline to generate it."
     features = meta.get("feature_order", []) if isinstance(meta, dict) else []
+    # short tokens for UI chips (fallback to first 6 chars)
+    tokens = {}
+    try:
+        for f in features:
+            parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+            if parts:
+                tok = ''.join([p[0] for p in parts]).upper()
+                tokens[f] = tok if len(tok) <= 6 else tok[:6]
+            else:
+                tokens[f] = str(f)[:6]
+    except Exception:
+        tokens = {f: str(f)[:6] for f in features}
+    # compute diagnostics for UI: how many rows in features file and how many used for training
+    features_count = None
+    training_count = None
+    try:
+        feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+        if os.path.exists(feat_path):
+            try:
+                df_feats = pd.read_parquet(feat_path)
+                features_count = int(len(df_feats))
+            except Exception:
+                features_count = None
+    except Exception:
+        features_count = None
+
+    if isinstance(meta, dict):
+        row_index = meta.get("row_index")
+        if isinstance(row_index, (list, tuple)):
+            training_count = int(len(row_index))
+        else:
+            # fallback: try labels file length
+            try:
+                _, labels_path = cluster_paths(t)
+                if os.path.exists(labels_path):
+                    labels = np.load(labels_path)
+                    training_count = int(len(labels))
+            except Exception:
+                training_count = None
+
+    # attach diagnostics into meta passed to template
+    if isinstance(meta, dict):
+        meta["features_count"] = features_count
+        meta["training_count"] = training_count
     return templates.TemplateResponse(
         "cluster.html",
         {
@@ -287,6 +331,7 @@ def cluster_page(request: Request, ticker: str | None = None):
             "year": datetime.datetime.now().year,
             "clusters": meta,
             "features": features,
+            "tokens": tokens,
             "result": None,
             "error": error,
             "ticker": t,
@@ -306,6 +351,18 @@ def cluster_submit(request: Request, values: str = Form(...), ticker: str | None
         error = "Cluster metadata not found. Run the pipeline to generate it."
     features = meta.get("feature_order", []) if isinstance(meta, dict) else []
     result = None
+    # short tokens for UI chips (fallback to first 6 chars)
+    tokens = {}
+    try:
+        for f in features:
+            parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+            if parts:
+                tok = ''.join([p[0] for p in parts]).upper()
+                tokens[f] = tok if len(tok) <= 6 else tok[:6]
+            else:
+                tokens[f] = str(f)[:6]
+    except Exception:
+        tokens = {f: str(f)[:6] for f in features}
     if not error and meta:
         try:
             nums = [float(x.strip()) for x in values.split(",") if x.strip() != ""]
@@ -334,6 +391,7 @@ def cluster_submit(request: Request, values: str = Form(...), ticker: str | None
             "year": datetime.datetime.now().year,
             "clusters": meta,
             "features": features,
+            "tokens": tokens,
             "result": result,
             "error": error,
             "ticker": t,
