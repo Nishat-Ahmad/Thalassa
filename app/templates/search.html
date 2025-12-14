@@ -15,8 +15,11 @@
         {% endfor %}
       </select>
     </label>
-    <button id="downloadCsvBtn" class="btn modern-btn" type="button">Download CSV</button>
-    <button id="searchBtn" class="btn modern-btn" type="submit">Fetch</button>
+    <div class="form-actions modern-actions" style="display:flex;gap:0.5rem;align-items:center;">
+      <button id="searchBtn" class="btn modern-btn" type="submit">Fetch</button>
+      <button id="toggleDataBtn" class="btn modern-btn" type="button">Show Data Table</button>
+      <button id="downloadCsvBtn" class="btn modern-btn" type="button">Download Data CSV</button>
+    </div>
   </form>
 </section>
 
@@ -110,8 +113,9 @@
   <div class="chart-wrap modern-chart">
     <canvas id="volumeChart" height="140"></canvas>
   </div>
-  
-  <div class="table-wrap modern-table">
+</div>
+
+  <div class="table-wrap modern-table" id="dataTableWrap" style="display:none;" aria-hidden="true">
     <table class="table">
       <thead>
         <tr>
@@ -299,6 +303,29 @@
         }catch(e){ console.error('CSV export failed', e); }
       }, false);
     }
+  })();
+</script>
+<script>
+  (function(){
+    const toggleBtn = document.getElementById('toggleDataBtn');
+    const tableWrap = document.getElementById('dataTableWrap');
+    if(!toggleBtn || !tableWrap) return;
+    toggleBtn.addEventListener('click', function(){
+      const computed = getComputedStyle(tableWrap).display;
+      const isHidden = tableWrap.style.display === 'none' || computed === 'none' || tableWrap.hasAttribute('hidden');
+      if(isHidden){
+        tableWrap.style.display = '';
+        tableWrap.removeAttribute('hidden');
+        tableWrap.setAttribute('aria-hidden', 'false');
+        toggleBtn.textContent = 'Hide Data Table';
+        try{ tableWrap.scrollIntoView({behavior: 'smooth', block: 'start'}); }catch(e){}
+      } else {
+        tableWrap.style.display = 'none';
+        tableWrap.setAttribute('hidden', '');
+        tableWrap.setAttribute('aria-hidden', 'true');
+        toggleBtn.textContent = 'Show Data Table';
+      }
+    }, false);
   })();
 </script>
 {% endif %}
