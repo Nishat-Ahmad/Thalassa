@@ -178,6 +178,9 @@ body > .footer { flex: 0 0 auto; margin-top: auto; }
 /* Ensure left-most action (Back) stays left and other controls align horizontally to the right */
 .toolbar .btn:first-child { margin-right: auto; }
 
+/* Allow specific toolbars to opt out of first-child auto margin */
+.toolbar.no-auto .btn:first-child { margin-right: 8px; }
+
 /* Cards */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 18px 0; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow); }
@@ -348,6 +351,23 @@ pre.detail-array, .detail-array {
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin: 18px 0; }
 .list { margin: 0; padding-left: 18px; }
 .list li { margin: 4px 0; }
+
+/* Help panel: ticker chips */
+.ticker-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.ticker-chip { display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00)); border: 1px solid rgba(255,255,255,0.04); padding: 8px 12px; border-radius: 999px; cursor: pointer; transition: transform 0.12s ease, box-shadow 0.12s ease; }
+.ticker-chip strong { font-family: monospace; font-weight:700; color: var(--text); }
+.ticker-chip small { color: var(--muted); margin-left:4px; font-size:0.82rem; }
+.ticker-chip:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.18); border-color: rgba(255,255,255,0.07); }
+
+/* make chips look tappable on mobile */
+@media (max-width:760px) {
+  .ticker-chips { gap: 10px; }
+  .ticker-chip { padding: 10px 14px; font-size: 0.95rem; }
+}
+
+/* Yahoo link styling (help panel) */
+.yahoo-link { color: #1e63d1; font-weight: 600; }
+.yahoo-link:hover { color: #4a90ff; text-decoration: underline; }
 
 /* Tables */
 .table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 12px; }

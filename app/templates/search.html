@@ -33,10 +33,48 @@
     <h1>Try These Tickers</h1>
     <p class="muted">Click to prefill the search box.</p>
   </div>
-  <div class="toolbar modern-toolbar">
-    {% for t in suggestions %}
-      <a class="btn modern-btn-outline" href="/search?ticker={{ t }}">{{ t }}</a>
-    {% endfor %}
+  <div class="toolbar modern-toolbar no-auto">
+    <!-- International sample tickers: click to prefill/search -->
+    <a class="btn modern-btn-outline" href="/search?ticker=AAPL">AAPL</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=MSFT">MSFT</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=RDSA.L">RDSA.L</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=SHOP.TO">SHOP.TO</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=BHP.AX">BHP.AX</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=7203.T">7203.T</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=0005.HK">0005.HK</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=INFY.NS">INFY.NS</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=SAP.DE">SAP.DE</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=PETR4.SA">PETR4.SA</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=ASML.AS">ASML.AS</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=005930.KS">005930.KS</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=D05.SI">D05.SI</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=AMXL.MX">AMXL.MX</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=ENI.MI">ENI.MI</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=SAN.MC">SAN.MC</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=NOVN.SW">NOVN.SW</a>
+    <a class="btn modern-btn-outline" href="/search?ticker=EQNR.OL">EQNR.OL</a>
+  </div>
+  <div class="panel modern-panel" style="margin-top:0.75rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div>
+        <h3 style="margin:0 0 6px;font-size:1.05rem;">Search tips</h3>
+        <p class="muted small" style="margin:0">Type the exact Yahoo Finance ticker. Include the exchange suffix when required.</p>
+      </div>
+      <div style="text-align:right;">
+        <p class="muted small" style="margin:0">Not sure? Copy the symbol from <a href="https://finance.yahoo.com" target="_blank" class="link-muted yahoo-link">Yahoo Finance</a>.</p>
+      </div>
+    </div>
+    <div class="ticker-chips" style="margin-top:12px;">
+      <span class="ticker-chip"><strong>AAPL</strong><small> — US</small></span>
+      <span class="ticker-chip"><strong>RDSA.L</strong><small> — UK</small></span>
+      <span class="ticker-chip"><strong>SHOP.TO</strong><small> — CA</small></span>
+      <span class="ticker-chip"><strong>BHP.AX</strong><small> — AU</small></span>
+      <span class="ticker-chip"><strong>7203.T</strong><small> — JP</small></span>
+      <span class="ticker-chip"><strong>0005.HK</strong><small> — HK</small></span>
+      <span class="ticker-chip"><strong>INFY.NS</strong><small> — IN</small></span>
+      <span class="ticker-chip"><strong>SAP.DE</strong><small> — DE</small></span>
+      <span class="ticker-chip"><strong>PETR4.SA</strong><small> — BR</small></span>
+    </div>
   </div>
 </div>
 {% endif %}
@@ -47,8 +85,9 @@
     <h3 class="muted">{{ ticker_info.symbol }}</h3>
     <p class="muted"><strong>Name:</strong> {{ ticker_info.name or '-' }}</p>
     <p class="muted small"><strong>Sector:</strong> {{ ticker_info.sector or '-' }}</p>
-    <p class="muted small"><strong>Industry:</strong> {{ ticker_info.industry or '-' }}</p>
     <p class="muted small"><strong>Country:</strong> {{ ticker_info.country or '-' }}</p>
+    <p class="muted small"><strong>Currency:</strong> {{ ticker_info.currency or ticker_info.currency_symbol or '-' }}</p>
+    <p class="muted small"><strong>Head Quarters:</strong> {{ ticker_info.country or '-' }}</p>
   </div>
   <div class="card modern-card">
     <h3>Next Steps</h3>
@@ -98,6 +137,7 @@
       <p class="primary-value"><strong>Last Price:</strong> {% if ticker_info.last_price is not none %}{{ '%.2f'|format(ticker_info.last_price) }}{% else %}N/A{% endif %}</p>
       <p class="primary-value"><strong>Prev Close:</strong> {% if ticker_info.previous_close is not none %}{{ '%.2f'|format(ticker_info.previous_close) }}{% else %}N/A{% endif %}</p>
     <p class="muted small">Latest traded price and previous session's closing price — useful for quick pricing context.</p>
+    <p class="muted small"><strong>Prices shown in:</strong> {{ ticker_info.currency or ticker_info.currency_symbol or 'local exchange currency' }}</p>
   </div>
 </div>
 {% endif %}
