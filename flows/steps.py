@@ -34,7 +34,7 @@ def _ticker_from_path(path: str) -> str:
     return base.upper()
 
 @task(retries=2, retry_delay_seconds=10)
-def ingest(ticker: str, period: str = "2y"):
+def ingest(ticker: str, period: str = "max"):
     df = yf.download(ticker, period=period, progress=False)
     df.reset_index(inplace=True)
     if isinstance(df.columns, pd.MultiIndex):
