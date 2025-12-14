@@ -2,7 +2,6 @@
 {% block content %}
 <section class="section-header">
   <h1>PCA Overview</h1>
-  <p class="muted">Explained variance and components from the latest PCA run.</p>
   <div class="toolbar">
     <a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">← Back to ML Tasks</a>
     <span class="muted">Ticker: <strong>{{ ticker or 'AAPL' }}</strong></span>
@@ -11,7 +10,7 @@
     <p class="alert">{{ error }}</p>
   {% endif %}
   {% if pca %}
-    <div class="grid">
+    <div class="grid" style="gap:12px">
       <div class="panel">
         <h3>Summary</h3>
         <p><strong>Components:</strong> {{ pca.n_components }}</p>
@@ -19,22 +18,299 @@
         <p><strong>Feature Count:</strong> {{ pca.feature_order|length }}</p>
       </div>
       <div class="panel">
-        <h3>Explained Variance Ratio</h3>
+        <h3>Variance Ratio</h3>
         {% if pca.explained_variance_ratio %}
-          <code style="display:block;white-space:pre-wrap">{{ pca.explained_variance_ratio|map('float')|map('round', 4)|list|join(', ') }}</code>
+          <p class="muted">Explained variance per component. Click a component to inspect.</p>
+          <div class="feature-tokens" style="margin-top:8px">
+            {% set cum = 0 %}
+            {% for v in pca.explained_variance_ratio %}
+              {% set cum = cum + v %}
+              <span class="evr-chip feature-chip" title="PC{{ loop.index }}: {{ (v*100)|round(2) }}%" data-idx="{{ loop.index0 }}" data-val="{{ v }}">PC{{ loop.index }}</span>
+            {% endfor %}
+          </div>
+          <div id="evrDetail" class="panel" style="display:none; margin-top:10px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <div>
+                <div id="evrDetailName" style="font-weight:700"></div>
+                <div id="evrDetailDef" class="muted" style="margin-top:6px; white-space:pre-wrap"></div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button id="evrCopy" class="btn small">Copy</button>
+                <button id="evrClose" class="btn small btn-outline">Close</button>
+              </div>
+            </div>
+          </div>
         {% else %}
           <p class="muted">No variance data available.</p>
         {% endif %}
       </div>
-    </div>
-    <section class="panel" style="margin-top:16px">
-      <h3>Feature Order</h3>
-      <p class="muted">First 25 features shown.</p>
-      <code style="display:block;white-space:pre-wrap">{{ pca.feature_order[:25]|join(', ') }}</code>
-      <div class="form-actions" style="margin-top:8px">
-        <a class="btn btn-outline" href="/pca-info{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Open PCA JSON</a>
+      
+      <div class="panel">
+        <h3>Feature Order</h3>
+        {% if features %}
+          <p class="muted">Inputs expected ({{ features|length }} features).</p>
+          <div class="feature-tokens" style="margin-top:8px">
+            {% for f in features %}
+              <span class="feature-chip" title="{{ f }}" data-feature="{{ f }}">{{ tokens.get(f, f[:6]) }}</span>
+            {% endfor %}
+          </div>
+          <div id="featureDetail" class="panel" style="display:none; margin-top:10px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <div>
+                <div id="featureDetailName" style="font-weight:700"></div>
+                <div id="featureDetailDef" class="muted" style="margin-top:6px"></div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button id="featureCopy" class="btn small">Copy</button>
+                <button id="featureClose" class="btn small btn-outline">Close</button>
+              </div>
+            </div>
+          </div>
+        {% else %}
+          <p class="muted">No feature order available.</p>
+        {% endif %}
+        <div class="form-actions" style="margin-top:8px">
+          <a class="btn btn-outline" href="/pca-info{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Open PCA JSON</a>
+        </div>
       </div>
-    </section>
+    </div>
+    <div id="screeContainer" style="margin-top:14px">
+      <div class="panel">
+        <h3>Scree Plot</h3>
+        <div id="screeDiv" style="width:100%;height:320px;margin-top:8px"></div>
+      </div>
+    </div>
+    <div id="topLoadingsContainer" style="margin-top:14px">
+      <div class="panel">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <h3 style="margin:0">Top Loadings</h3>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label class="muted" style="margin:0 6px 0 0">PC:</label>
+            <select id="pcSelect" class="modern-input" style="min-width:90px"></select>
+            <label class="muted" style="margin:0 6px 0 0">Top:</label>
+            <select id="topNSelect" class="modern-input" style="min-width:80px">
+              <option value="5">Top 5</option>
+              <option value="10">Top 10</option>
+              <option value="15">Top 15</option>
+              <option value="all">All</option>
+            </select>
+          </div>
+        </div>
+        <div id="topLoadingsDiv" style="width:100%;height:360px;margin-top:12px"></div>
+      </div>
+    </div>
+    <div id="corrContainer" style="margin-top:14px">
+      <div class="panel">
+        <h3>Feature Correlation</h3>
+        <div id="corrNote" class="muted" style="margin-top:6px">Checking for correlation data in PCA metadata...</div>
+        <div id="corrDiv" style="width:100%;height:480px;margin-top:10px"></div>
+      </div>
+    </div>
   {% endif %}
 </section>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script>
+  (function(){
+    const pcaMeta = {{ pca|tojson }};
+    try{
+      const defs = {
+        'Close': 'Last traded price at market close for the period — the primary price reference used for returns and indicators.',
+        'High': 'Highest traded price during the session — useful for range analysis and intraday volatility.',
+        'Low': 'Lowest traded price during the session — useful for support/range analysis.',
+        'Open': 'First traded price at session open — used to detect gap moves versus previous close.',
+        'Volume': 'Total traded shares in the period — liquidity measure used to confirm price moves and volume-weighted signals.',
+        'return': 'Arithmetic return for the period: (Close / previous Close − 1). Captures directional percent change.',
+        'log_return': 'Natural-log return: ln(Close / previous Close). Additive over time and preferable for some statistical models.',
+        'sma_5': '5-period simple moving average of Close — short-term trend baseline (price units).',
+        'ema_5': '5-period exponential moving average — short-term trend that weights recent closes more heavily than SMA.',
+        'sma_10': '10-period simple moving average — short-to-intermediate trend reference.',
+        'ema_10': '10-period exponential moving average — responds faster than SMA10 to recent price moves.',
+        'sma_20': '20-period simple moving average — commonly used for intermediate trend filtering.',
+        'ema_20': '20-period exponential moving average — intermediate trend indicator with recency bias.',
+        'vol_10': 'Rolling realized volatility: standard deviation of returns over 10 periods — a short-term risk/volatility proxy.',
+        'rsi_14': 'Relative Strength Index over 14 periods (0–100): momentum oscillator used for overbought/oversold context and divergence.',
+        'macd': 'MACD line (typically 12-EMA minus 26-EMA) — momentum/trend indicator in price units.',
+        'macd_signal': 'MACD signal line (usually a 9-EMA of MACD) — used for crossover signals and trend smoothing.',
+        'macd_hist': 'MACD histogram = MACD − signal — positive values indicate MACD above signal (rising bullish momentum).',
+        'lag_close_1': 'Close price one period prior — preserves raw lagged price information for temporal patterns.',
+        'lag_return_1': 'Return one period prior — recent return used to capture short-term momentum or mean-reversion.',
+        'lag_close_2': 'Close price two periods prior — additional temporal context.',
+        'lag_return_2': 'Return two periods prior — historical return signal at lag 2.',
+        'lag_close_3': 'Close price three periods prior — extended short-term context.',
+        'lag_return_3': 'Return three periods prior — captures slightly older momentum effects.',
+        'lag_close_5': 'Close price five periods prior — useful for weekly-style comparisons in daily data.',
+        'lag_return_5': 'Return five periods prior — longer short-term return used to capture recent trend persistence.'
+      };
+
+      const chips = Array.from(document.querySelectorAll('.feature-chip:not(.evr-chip)'));
+      const panel = document.getElementById('featureDetail');
+      const pName = document.getElementById('featureDetailName');
+      const pDef = document.getElementById('featureDetailDef');
+      const btnClose = document.getElementById('featureClose');
+      const btnCopy = document.getElementById('featureCopy');
+
+      chips.forEach(ch => ch.addEventListener('click', (e) => {
+        const feat = ch.getAttribute('data-feature') || ch.title || ch.textContent;
+        pName.textContent = feat;
+        pDef.textContent = defs[feat] || 'No definition available.';
+        if(panel) panel.style.display = '';
+        panel && panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+      }));
+
+      btnClose && btnClose.addEventListener('click', ()=>{ if(panel) panel.style.display='none'; });
+      btnCopy && btnCopy.addEventListener('click', ()=>{
+        const text = (pName.textContent || '') + ' — ' + (pDef.textContent || '');
+        navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : null;
+        if(btnCopy){ btnCopy.textContent = 'Copied'; setTimeout(()=> btnCopy.textContent = 'Copy', 1200); }
+      });
+    }catch(e){ console.warn('PCA feature token init failed', e); }
+    try{
+      // EVR (explained variance ratio) chips
+      const evrChips = Array.from(document.querySelectorAll('.evr-chip'));
+      const evrPanel = document.getElementById('evrDetail');
+      const evrName = document.getElementById('evrDetailName');
+      const evrDef = document.getElementById('evrDetailDef');
+      const evrClose = document.getElementById('evrClose');
+      const evrCopy = document.getElementById('evrCopy');
+
+      function pct(x){ return (Number(x)*100).toFixed(2) + '%'; }
+      function cumulative(i){ let s=0; for(let j=0;j<=i;j++){ s += Number(pcaMeta.explained_variance_ratio[j]||0); } return (s*100).toFixed(2)+'%'; }
+
+      evrChips.forEach(ch => ch.addEventListener('click', ()=>{
+        const idx = Number(ch.getAttribute('data-idx'));
+        const val = Number(ch.getAttribute('data-val'));
+        evrName.textContent = `PC${idx+1} — ${pct(val)}`;
+        let txt = `Explained variance: ${pct(val)}\nCumulative (up to this PC): ${cumulative(idx)}\n`;
+        // if components and feature_order present, show top contributors
+        try{
+          if(Array.isArray(pcaMeta.components) && Array.isArray(pcaMeta.feature_order)){
+            const comps = pcaMeta.components[idx] || [];
+            const pairs = comps.map((v,i)=> ({feat: pcaMeta.feature_order[i]||String(i), val: Math.abs(Number(v)||0), raw: Number(v)||0}));
+            pairs.sort((a,b)=> b.val - a.val);
+            const top = pairs.slice(0,5).map(p=> `${p.feat} (${p.raw.toFixed(4)})`).join(', ');
+            txt += `Top contributors: ${top}`;
+          }
+        }catch(e){}
+        evrDef.textContent = txt;
+        if(evrPanel) evrPanel.style.display = '';
+        evrPanel && evrPanel.scrollIntoView({behavior:'smooth', block:'nearest'});
+      }));
+
+      evrClose && evrClose.addEventListener('click', ()=>{ if(evrPanel) evrPanel.style.display='none'; });
+      evrCopy && evrCopy.addEventListener('click', ()=>{
+        const text = (evrName.textContent || '') + ' — ' + (evrDef.textContent || '');
+        navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : null;
+        if(evrCopy){ evrCopy.textContent = 'Copied'; setTimeout(()=> evrCopy.textContent = 'Copy', 1200); }
+      });
+    }catch(e){ console.warn('EVR init failed', e); }
+    try{
+      // Render scree plot and cumulative info
+      const screeDiv = document.getElementById('screeDiv');
+      const cumText = document.getElementById('cumulativeText');
+      if(screeDiv && pcaMeta && Array.isArray(pcaMeta.explained_variance_ratio)){
+        const evr = pcaMeta.explained_variance_ratio.map(x=> Number(x) || 0);
+        const evrPerc = evr.map(x => x * 100);
+        // cumulative array
+        const cum = []; let s=0; for(let i=0;i<evr.length;i++){ s+=evr[i]; cum.push(s); }
+        // find components needed for 80%
+        const target = 0.8; let k80 = evr.length; for(let i=0;i<cum.length;i++){ if(cum[i] >= target){ k80 = i+1; break; }}
+        const cumPct = (cum[Math.min(k80-1, cum.length-1)] || 0) * 100;
+        if(cumText) cumText.textContent = `Components to reach 80%: ${k80} (cumulative ${cumPct.toFixed(2)}%)`;
+        // build per-component cumulative list
+        if(document.getElementById('cumList')){
+          const lines = evrPerc.map((p,i)=> `PC${i+1}: ${p.toFixed(2)}% (cumulative ${(cum[i]*100).toFixed(2)}%)`);
+          document.getElementById('cumList').textContent = lines.join('\n');
+        }
+
+        // scree: bar + line overlay
+        const x = evr.map((_,i)=> 'PC'+(i+1));
+        const traces = [
+          { x: x, y: evrPerc, type: 'bar', marker: { color: 'rgba(25,211,197,0.9)' }, name: 'Explained %' },
+          { x: x, y: evrPerc, type: 'scatter', mode: 'lines+markers', line: { color: '#19d3c5' }, marker: { color: '#19d3c5' }, name: 'Trend' }
+        ];
+        const layout = {
+          template: 'plotly_dark',
+          margin:{l:36,r:80,t:30,b:48},
+          font: { color: '#ffffff' },
+          yaxis:{
+            title:{text: 'Explained Variance (%)', font:{color:'#ffffff'}, standoff: 10},
+            tickformat:'.1f',
+            gridcolor:'rgba(255,255,255,0.03)',
+            tickfont:{color:'#ffffff'},
+            automargin: true,
+            side: 'right'
+          },
+          xaxis:{ tickangle:-45, tickfont:{color:'#ffffff'}, title:{text: 'Principal Component', font:{color:'#ffffff'}} },
+          showlegend:false,
+          plot_bgcolor:'rgba(0,0,0,0)', paper_bgcolor:'rgba(0,0,0,0)'
+        };
+        const loadPlotly = () => { if(window.Plotly) return Promise.resolve(); return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.plot.ly/plotly-2.24.1.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); };
+        loadPlotly().then(()=>{ Plotly.newPlot('screeDiv', traces, layout, {responsive:true,displayModeBar:false}); }).catch(e=>console.warn('scree plot failed', e));
+      }
+    }catch(e){ console.warn('scree init failed', e); }
+    try{
+      // Top Loadings chart (per-PC horizontal bars)
+      const topDiv = document.getElementById('topLoadingsDiv');
+      const pcSelect = document.getElementById('pcSelect');
+      const topNSelect = document.getElementById('topNSelect');
+      function ensurePlotly(){ if(window.Plotly) return Promise.resolve(); return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.plot.ly/plotly-2.24.1.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
+      function renderTopLoadings(){
+        if(!pcaMeta || !Array.isArray(pcaMeta.components) || !Array.isArray(pcaMeta.feature_order)) return;
+        const pcIdx = Math.max(0, Number(pcSelect.value)||0);
+        let topN = topNSelect.value === 'all' ? null : Number(topNSelect.value);
+        const comps = pcaMeta.components[pcIdx] || [];
+        const pairs = comps.map((v,i)=> ({ feat: pcaMeta.feature_order[i]||String(i), val: Number(v)||0 }));
+        pairs.sort((a,b)=> Math.abs(b.val) - Math.abs(a.val));
+        const chosen = (topN && topN>0) ? pairs.slice(0, topN) : pairs.slice();
+        // reverse for horizontal bar (largest on top)
+        chosen.reverse();
+        const labels = chosen.map(p=> p.feat);
+        const values = chosen.map(p=> p.val);
+        const colors = values.map(v=> v>=0 ? 'rgba(25,211,197,0.9)' : 'rgba(255,130,130,0.9)');
+        const trace = [{ x: values, y: labels, type: 'bar', orientation: 'h', marker:{ color: colors }, hovertemplate: '%{y}: %{x:.4f}<extra></extra>' }];
+        const layout2 = {
+          template: 'plotly_dark', margin:{l:220,r:40,t:20,b:40}, font:{color:'#ffffff'}, xaxis:{title:{text:'Loading (signed)', font:{color:'#ffffff'}}, tickfont:{color:'#ffffff'}}, yaxis:{tickfont:{color:'#ffffff'}}, plot_bgcolor:'rgba(0,0,0,0)', paper_bgcolor:'rgba(0,0,0,0)'
+        };
+        ensurePlotly().then(()=>{ Plotly.newPlot('topLoadingsDiv', trace, layout2, {responsive:true,displayModeBar:false}); }).catch(e=>console.warn('top loadings plot failed', e));
+      }
+      // populate PC selector
+      if(pcaMeta && Array.isArray(pcaMeta.components)){
+        const n = pcaMeta.components.length || (pcaMeta.n_components||0);
+        for(let i=0;i<n;i++){ const o = document.createElement('option'); o.value = i; o.textContent = 'PC'+(i+1); pcSelect.appendChild(o); }
+        pcSelect.value = 0;
+        pcSelect.addEventListener('change', renderTopLoadings);
+        topNSelect.addEventListener('change', renderTopLoadings);
+        renderTopLoadings();
+      }
+    }catch(e){ console.warn('Top loadings init failed', e); }
+    try{
+      // Feature correlation heatmap
+      const corrDiv = document.getElementById('corrDiv');
+      const corrNote = document.getElementById('corrNote');
+      function loadPlotlyAgain(){ if(window.Plotly) return Promise.resolve(); return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.plot.ly/plotly-2.24.1.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
+      // look for common keys in pca metadata that could hold correlation matrix
+      const corrKeys = ['feature_correlation','feature_corr','corr_matrix','correlation_matrix','corr'];
+      let corr = null;
+      for(const k of corrKeys){ if(pcaMeta && pcaMeta[k]){ corr = pcaMeta[k]; break; } }
+      if(corr && Array.isArray(corr) && Array.isArray(pcaMeta.feature_order)){
+        // ensure numeric matrix rows equal feature count
+        const n = pcaMeta.feature_order.length;
+        if(corr.length === n){
+          const z = corr.map(r => r.map(v => Number(v) || 0));
+          const labels = pcaMeta.feature_order.slice();
+          const trace = [{ z: z, x: labels, y: labels, type: 'heatmap', colorscale: 'RdBu', reversescale:true, zmin:-1, zmax:1, colorbar:{title:'r'} }];
+          const layout = { template:'plotly_dark', margin:{l:120,r:10,t:24,b:160}, xaxis:{tickangle:-45, tickfont:{color:'#ffffff'}}, yaxis:{tickfont:{color:'#ffffff'}}, font:{color:'#ffffff'}, plot_bgcolor:'rgba(0,0,0,0)', paper_bgcolor:'rgba(0,0,0,0)'};
+          loadPlotlyAgain().then(()=>{ Plotly.newPlot('corrDiv', trace, layout, {responsive:true,displayModeBar:false}); }).catch(e=>{ console.warn('corr plot failed', e); corrNote.textContent = 'Failed to render correlation heatmap.'; });
+          corrNote.style.display = 'none';
+        } else {
+          corrNote.textContent = 'Correlation matrix present but size does not match feature count.';
+        }
+      } else {
+        corrNote.innerHTML = 'Correlation matrix not present in PCA metadata. To enable this, save the features correlation when running PCA (or run a separate correlation step).';
+      }
+    }catch(e){ console.warn('Correlation heatmap init failed', e); }
+  })();
+</script>
 {% endblock %}

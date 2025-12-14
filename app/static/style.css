@@ -259,6 +259,18 @@ pre.detail-array, .detail-array {
   .cards-horizontal .card { min-width: initial; flex: initial; }
 }
 
+/* Generic grid container for compact panels (3-up by default) */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.grid .panel { margin: 0; }
+@media (max-width: 900px) {
+  .grid { grid-template-columns: 1fr; }
+}
+
 /* Vertical stack variant: force each card to own full-width row */
 .cards-vertical {
   display: flex;

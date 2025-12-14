@@ -259,9 +259,32 @@ def pca_page(request: Request, ticker: str | None = None):
             error = f"Failed to load PCA metadata: {e}"
     else:
         error = "PCA metadata not found. Run the pipeline to generate it."
+    # prepare feature tokens for UI (same style as cluster page)
+    features = meta.get("feature_order", []) if isinstance(meta, dict) else []
+    tokens = {}
+    try:
+        for f in features:
+            parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+            if parts:
+                tok = ''.join([p[0] for p in parts]).upper()
+                tokens[f] = tok if len(tok) <= 6 else tok[:6]
+            else:
+                tokens[f] = str(f)[:6]
+    except Exception:
+        tokens = {f: str(f)[:6] for f in features}
+
     return templates.TemplateResponse(
         "pca.html",
-        {"request": request, "title": "PCA", "year": datetime.datetime.now().year, "pca": meta, "error": error, "ticker": t},
+        {
+            "request": request,
+            "title": "PCA",
+            "year": datetime.datetime.now().year,
+            "pca": meta,
+            "error": error,
+            "ticker": t,
+            "features": features,
+            "tokens": tokens,
+        },
     )
 
 @router.get("/cluster", response_class=HTMLResponse)

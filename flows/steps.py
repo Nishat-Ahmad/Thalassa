@@ -176,15 +176,42 @@ def compute_pca(feature_path: str, n_components: int = 5, run_dir: str | None = 
         return {"status": "skipped", "reason": "sklearn not available"}
     df = pd.read_parquet(feature_path)
     feature_cols = [c for c in df.columns if c not in ["date", "ticker"] and pd.api.types.is_numeric_dtype(df[c])]
-    X = df[feature_cols].replace([np.inf, -np.inf], np.nan).dropna()
+    if not feature_cols:
+        return {"status": "skipped", "reason": "no numeric features"}
+
+    X_df = df[feature_cols].replace([np.inf, -np.inf], np.nan).copy()
+    # drop constant columns
+    nunique = X_df.nunique(dropna=False)
+    keep_cols = [c for c in feature_cols if nunique.get(c, 0) > 1]
+    removed = [c for c in feature_cols if c not in keep_cols]
+    if removed:
+        feature_cols = [c for c in feature_cols if c in keep_cols]
+        X_df = X_df[feature_cols]
+
+    # log1p Volume to reduce scale/skew
+    if 'Volume' in X_df.columns:
+        try:
+            X_df['Volume'] = pd.to_numeric(X_df['Volume'], errors='coerce').fillna(0.0)
+            X_df['Volume'] = np.log1p(X_df['Volume'])
+        except Exception:
+            pass
+
+    X = X_df.dropna()
     if X.empty:
-        return {"status": "skipped", "reason": "no data"}
-    pca = PCA(n_components=min(n_components, X.shape[1]))
-    comps = pca.fit_transform(X)
+        return {"status": "skipped", "reason": "no data after preprocessing"}
+
+    # scale
+    scaler = StandardScaler() if StandardScaler else None
+    X_scaled = scaler.fit_transform(X) if scaler is not None else X.to_numpy()
+
+    pca = PCA(n_components=min(n_components, X_scaled.shape[1]))
+    comps = pca.fit_transform(X_scaled)
+
     try:
         dates = pd.to_datetime(df.loc[X.index, "date"]).dt.strftime("%Y-%m-%d").tolist()
     except Exception:
         dates = [str(i) for i in X.index.tolist()]
+
     ticker = _ticker_from_path(feature_path)
     target_dir = run_dir or os.path.join(REGISTRY_DIR, ticker)
     os.makedirs(target_dir, exist_ok=True)
@@ -194,11 +221,20 @@ def compute_pca(feature_path: str, n_components: int = 5, run_dir: str | None = 
         "n_components": int(pca.n_components_),
         "explained_variance_ratio": pca.explained_variance_ratio_.tolist(),
         "components": pca.components_.tolist(),
-        "mean": pca.mean_.tolist(),
+        "mean": scaler.mean_.tolist() if scaler is not None else None,
+        "scale": scaler.scale_.tolist() if scaler is not None else None,
         "feature_order": feature_cols,
         "row_index": dates,
         "ticker": ticker,
     }
+    # compute and include feature correlation matrix (Pearson) for UI heatmap
+    try:
+        corr = X_df.corr(method="pearson")
+        # represent as nested lists aligned with feature_order
+        corr_matrix = corr.reindex(index=feature_cols, columns=feature_cols).fillna(0.0).values.tolist()
+        meta["feature_correlation"] = corr_matrix
+    except Exception:
+        meta["feature_correlation"] = None
     with open(os.path.join(target_dir, f"pca_{ticker}.json"), "w") as f:
         json.dump(meta, f)
     np.save(os.path.join(target_dir, f"pca_transformed_{ticker}.npy"), comps)
@@ -265,7 +301,9 @@ def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None)
     series = series.asfreq(freq).ffill()
     order = (1, 1, 1)
     try:
-        model = ARIMA(series, order=order)
+        # disable automatic re-parameterization enforcement to avoid
+        # "Non-stationary starting autoregressive" / "Non-invertible starting MA" warnings
+        model = ARIMA(series, order=order, enforce_stationarity=False, enforce_invertibility=False)
         fitted = model.fit()
         forecast = fitted.forecast(steps=horizon)
         conf_res = fitted.get_forecast(steps=horizon)

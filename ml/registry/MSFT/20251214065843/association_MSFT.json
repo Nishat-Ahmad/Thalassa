@@ -1,0 +1,184 @@
+{
+  "ticker": "MSFT",
+  "min_support": 0.1,
+  "min_confidence": 0.6,
+  "n_rules": 13,
+  "rules": [
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "consequents": [
+        "RET_UP"
+      ],
+      "support": 0.38509316770186336,
+      "confidence": 0.688888888888889,
+      "lift": 1.27974358974359,
+      "leverage": 0.08417885112457085,
+      "conviction": 1.4840283939662828
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10",
+        "ticker=MSFT"
+      ],
+      "consequents": [
+        "RET_UP"
+      ],
+      "support": 0.38509316770186336,
+      "confidence": 0.688888888888889,
+      "lift": 1.27974358974359,
+      "leverage": 0.08417885112457085,
+      "conviction": 1.4840283939662828
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "consequents": [
+        "RET_UP",
+        "ticker=MSFT"
+      ],
+      "support": 0.38509316770186336,
+      "confidence": 0.688888888888889,
+      "lift": 1.27974358974359,
+      "leverage": 0.08417885112457085,
+      "conviction": 1.4840283939662828
+    },
+    {
+      "antecedents": [
+        "RET_UP"
+      ],
+      "consequents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "support": 0.38509316770186336,
+      "confidence": 0.7153846153846154,
+      "lift": 1.2797435897435898,
+      "leverage": 0.08417885112457085,
+      "conviction": 1.5494376363941584
+    },
+    {
+      "antecedents": [
+        "RET_UP",
+        "ticker=MSFT"
+      ],
+      "consequents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "support": 0.38509316770186336,
+      "confidence": 0.7153846153846154,
+      "lift": 1.2797435897435898,
+      "leverage": 0.08417885112457085,
+      "conviction": 1.5494376363941584
+    },
+    {
+      "antecedents": [
+        "RET_UP"
+      ],
+      "consequents": [
+        "PRICE_ABOVE_SMA10",
+        "ticker=MSFT"
+      ],
+      "support": 0.38509316770186336,
+      "confidence": 0.7153846153846154,
+      "lift": 1.2797435897435898,
+      "leverage": 0.08417885112457085,
+      "conviction": 1.5494376363941584
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "consequents": [
+        "ticker=MSFT"
+      ],
+      "support": 0.5590062111801242,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "RET_UP"
+      ],
+      "consequents": [
+        "ticker=MSFT"
+      ],
+      "support": 0.5383022774327122,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "RET_DOWN"
+      ],
+      "consequents": [
+        "ticker=MSFT"
+      ],
+      "support": 0.45962732919254656,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10",
+        "RET_UP"
+      ],
+      "consequents": [
+        "ticker=MSFT"
+      ],
+      "support": 0.38509316770186336,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "VOL_HIGH"
+      ],
+      "consequents": [
+        "ticker=MSFT"
+      ],
+      "support": 0.20082815734989648,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10",
+        "RET_DOWN"
+      ],
+      "consequents": [
+        "ticker=MSFT"
+      ],
+      "support": 0.17391304347826086,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "RET_DOWN",
+        "VOL_HIGH"
+      ],
+      "consequents": [
+        "ticker=MSFT"
+      ],
+      "support": 0.11180124223602485,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    }
+  ]
+}

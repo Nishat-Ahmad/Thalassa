@@ -14,6 +14,7 @@ import pandas as pd
 
 try:
     from sklearn.decomposition import PCA
+    from sklearn.preprocessing import StandardScaler
 except Exception as e:  # pragma: no cover - missing dependency
     raise SystemExit("sklearn is required for PCA. Install scikit-learn.") from e
 
@@ -31,16 +32,52 @@ def load_features(path: str) -> pd.DataFrame:
 
 
 def fit_pca(df: pd.DataFrame, n_components: int) -> tuple[dict, np.ndarray]:
+    # choose numeric feature columns (exclude date/ticker)
     feature_cols = [
         c for c in df.columns if c not in ["date", "ticker"] and pd.api.types.is_numeric_dtype(df[c])
     ]
-    X = df[feature_cols].replace([np.inf, -np.inf], np.nan).dropna()
+    if not feature_cols:
+        raise ValueError("No numeric feature columns found; cannot fit PCA")
+
+    # select and clean data
+    X_df = df[feature_cols].replace([np.inf, -np.inf], np.nan).copy()
+
+    # drop constant columns (zero variance)
+    nunique = X_df.nunique(dropna=False)
+    keep_cols = [c for c in feature_cols if nunique.get(c, 0) > 1]
+    removed = [c for c in feature_cols if c not in keep_cols]
+    if removed:
+        # keep feature_cols consistent order after removal
+        feature_cols = [c for c in feature_cols if c in keep_cols]
+        X_df = X_df[feature_cols]
+
+    # apply log1p to Volume if present to reduce scale/skew
+    if 'Volume' in X_df.columns:
+        try:
+            X_df['Volume'] = pd.to_numeric(X_df['Volume'], errors='coerce').fillna(0.0)
+            X_df['Volume'] = np.log1p(X_df['Volume'])
+        except Exception:
+            pass
+
+    # drop rows with NaNs after preprocessing
+    X = X_df.dropna()
     if X.empty:
         raise ValueError("No numeric data available after cleaning; cannot fit PCA")
 
-    n_comp = min(n_components, X.shape[1])
+    # compute feature correlation (Pearson) on the cleaned inputs
+    try:
+        corr = X.corr().fillna(0.0)
+        corr_matrix = corr.values.tolist()
+    except Exception:
+        corr_matrix = None
+
+    # standardize features before PCA
+    scaler = StandardScaler()
+    Xs = scaler.fit_transform(X.values)
+
+    n_comp = min(n_components, Xs.shape[1])
     pca = PCA(n_components=n_comp)
-    comps = pca.fit_transform(X)
+    comps = pca.fit_transform(Xs)
 
     try:
         dates = pd.to_datetime(df.loc[X.index, "date"]).dt.strftime("%Y-%m-%d").tolist()
@@ -53,9 +90,11 @@ def fit_pca(df: pd.DataFrame, n_components: int) -> tuple[dict, np.ndarray]:
         "n_components": int(pca.n_components_),
         "explained_variance_ratio": pca.explained_variance_ratio_.tolist(),
         "components": pca.components_.tolist(),
-        "mean": pca.mean_.tolist(),
+        "mean": scaler.mean_.tolist(),
+        "scale": scaler.scale_.tolist(),
         "feature_order": feature_cols,
         "row_index": dates,
+        "feature_correlation": corr_matrix,
     }
     return meta, comps
 

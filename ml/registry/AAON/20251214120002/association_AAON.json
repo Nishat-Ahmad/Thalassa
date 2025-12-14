@@ -1,0 +1,198 @@
+{
+  "ticker": "AAON",
+  "min_support": 0.1,
+  "min_confidence": 0.6,
+  "n_rules": 14,
+  "rules": [
+    {
+      "antecedents": [
+        "RET_UP"
+      ],
+      "consequents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "support": 0.37681159420289856,
+      "confidence": 0.708171206225681,
+      "lift": 1.2907422362528451,
+      "leverage": 0.08487755530693691,
+      "conviction": 1.546611456176674
+    },
+    {
+      "antecedents": [
+        "RET_UP",
+        "ticker=AAON"
+      ],
+      "consequents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "support": 0.37681159420289856,
+      "confidence": 0.708171206225681,
+      "lift": 1.2907422362528451,
+      "leverage": 0.08487755530693691,
+      "conviction": 1.546611456176674
+    },
+    {
+      "antecedents": [
+        "RET_UP"
+      ],
+      "consequents": [
+        "PRICE_ABOVE_SMA10",
+        "ticker=AAON"
+      ],
+      "support": 0.37681159420289856,
+      "confidence": 0.708171206225681,
+      "lift": 1.2907422362528451,
+      "leverage": 0.08487755530693691,
+      "conviction": 1.546611456176674
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "consequents": [
+        "RET_UP"
+      ],
+      "support": 0.37681159420289856,
+      "confidence": 0.6867924528301887,
+      "lift": 1.2907422362528451,
+      "leverage": 0.08487755530693691,
+      "conviction": 1.4939260146174766
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10",
+        "ticker=AAON"
+      ],
+      "consequents": [
+        "RET_UP"
+      ],
+      "support": 0.37681159420289856,
+      "confidence": 0.6867924528301887,
+      "lift": 1.2907422362528451,
+      "leverage": 0.08487755530693691,
+      "conviction": 1.4939260146174766
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "consequents": [
+        "RET_UP",
+        "ticker=AAON"
+      ],
+      "support": 0.37681159420289856,
+      "confidence": 0.6867924528301887,
+      "lift": 1.2907422362528451,
+      "leverage": 0.08487755530693691,
+      "conviction": 1.4939260146174766
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10"
+      ],
+      "consequents": [
+        "ticker=AAON"
+      ],
+      "support": 0.5486542443064182,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "RET_UP"
+      ],
+      "consequents": [
+        "ticker=AAON"
+      ],
+      "support": 0.5320910973084886,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "RET_DOWN"
+      ],
+      "consequents": [
+        "ticker=AAON"
+      ],
+      "support": 0.4658385093167702,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10",
+        "RET_UP"
+      ],
+      "consequents": [
+        "ticker=AAON"
+      ],
+      "support": 0.37681159420289856,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "VOL_HIGH"
+      ],
+      "consequents": [
+        "ticker=AAON"
+      ],
+      "support": 0.20082815734989648,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10",
+        "RET_DOWN"
+      ],
+      "consequents": [
+        "ticker=AAON"
+      ],
+      "support": 0.17184265010351968,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "RET_DOWN",
+        "VOL_HIGH"
+      ],
+      "consequents": [
+        "ticker=AAON"
+      ],
+      "support": 0.10973084886128365,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    },
+    {
+      "antecedents": [
+        "PRICE_ABOVE_SMA10",
+        "VOL_HIGH"
+      ],
+      "consequents": [
+        "ticker=AAON"
+      ],
+      "support": 0.10144927536231885,
+      "confidence": 1.0,
+      "lift": 1.0,
+      "leverage": 0.0,
+      "conviction": Infinity
+    }
+  ]
+}
