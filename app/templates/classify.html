@@ -2,41 +2,244 @@
 {% block content %}
 <section class="section-header">
   <h1>Single Classification</h1>
-  <p class="muted">Enter comma-separated feature values matching the trained classifier's expected features.</p>
   <div class="toolbar">
     <a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">← Back to ML Tasks</a>
     <span class="muted">Ticker: <strong>{{ ticker or 'AAPL' }}</strong></span>
   </div>
 </section>
+</section>
+{# Top duplicate of Expected Features removed. Features are shown in the horizontal layout below. #}
 
-<section class="panel">
-  <p><strong>Expected Features:</strong></p>
-  {% if features %}
-    <code style="display:block;white-space:pre-wrap">{{ features|join(', ') }}</code>
+{# Pipeline Summary moved further down to sit under the main layout. #}
+
+<!-- Model summary card -->
+{# Model Summary moved into the horizontal layout below. #}
+
+<!-- Horizontal layout: Model Summary | Expected Features | Feature Values -->
+<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-top:12px">
+  <div style="flex:1;min-width:300px;">
+    <section class="panel">
+      <h4>Model Summary</h4>
+      {% if model_meta %}
+        <p><strong>Model:</strong> {{ model_meta.get('model') or model_meta.get('name') or 'xgb_classifier' }}</p>
+        <p><strong>Created:</strong> {{ model_meta.get('created') or model_meta.get('created_at') }}</p>
+        <p><strong>Samples:</strong> {{ model_meta.get('samples', 'N/A') }}</p>
+        <p><strong>Features:</strong> {{ (model_meta.get('features')|length) if model_meta.get('features') else 'N/A' }}</p>
+        {% if model_meta.get('metrics') %}
+        {% endif %}
+          {# metrics moved to separate card below #}
+        <div style="margin-top:8px"><a class="btn btn-outline" href="/expected-features-class{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Open model JSON</a></div>
+      {% else %}
+        <p class="muted">No trained classifier metadata found for this ticker.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <div style="flex:1;min-width:320px;">
+    <section class="panel">
+      <h4>Expected Features</h4>
+      {% if features %}
+        <div class="feature-tokens" style="margin-top:8px; display:flex;flex-wrap:wrap;gap:6px;">
+          {% for f in features %}
+            <span class="feature-chip" title="{{ f }}" data-feature="{{ f }}">{{ tokens.get(f, f[:6]) }}</span>
+          {% endfor %}
+        </div>
+        <div id="featureDetail" class="panel" style="display:none; margin-top:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div>
+              <div id="featureDetailName" style="font-weight:700"></div>
+              <div id="featureDetailDef" class="muted" style="margin-top:6px"></div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button id="featureCopy" class="btn small">Copy</button>
+              <button id="featureClose" class="btn small btn-outline">Close</button>
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <p class="muted">Classifier not trained yet. Train the classifier or run the pipeline.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <div style="flex:1;min-width:320px;">
+    <section class="panel">
+      <h4>Feature Values</h4>
+      <form action="/classify" method="post" class="form">
+        <input type="hidden" name="ticker" value="{{ ticker or '' }}" />
+        <div class="form-control">
+          <label for="values">Feature Values (comma-separated)</label>
+          <input id="values" type="text" name="values" placeholder="e.g. 0.1, 0.2, 0.3, ..." required />
+          <small class="hint">Order must match the expected features shown in the middle column.</small>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Classify</button>
+        </div>
+      </form>
+      {% if result %}
+      <div style="margin-top:10px">
+        <section class="panel">
+          <h3>Result</h3>
+          <p>Probability Up: <strong>{{ '%.4f'|format(result.proba_up) }}</strong></p>
+          <p>Label: <strong>{{ result.label }}</strong> (1 = Up, 0 = Down)</p>
+        </section>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+</div>
+
+<!-- Pipeline Summary: moved here to appear below Model/Features/Form -->
+<section class="panel" style="margin-top:12px;margin-bottom:12px;">
+  <h4>Pipeline Summary</h4>
+  {% if prediction %}
+    <p>Source date: <strong>{{ prediction.source_date }}</strong></p>
+    <p>
+      Prediction (tomorrow): <strong>{{ prediction.label == 1 and 'Up' or 'Down' }}</strong>
+      — probability: <strong>{{ '%.3f'|format(prediction.proba_up) }}</strong>
+      {% if calibration and calibration.band %}
+        <small class="muted">(95% CI: {{ '%.3f'|format(calibration.band.lower) }}–{{ '%.3f'|format(calibration.band.upper) }})</small>
+        <span title="Approximate 95% confidence interval computed as ±1.96 * sqrt(p*(1-p)/n) where n is model training sample count (or a fallback)."></span>
+      {% else %}
+        <span title="No calibration/band information available"></span>
+      {% endif %}
+    </p>
   {% else %}
-    <p class="muted">Classifier not trained yet. Train the classifier or run the pipeline.</p>
+    <p class="muted">No pipeline prediction available for this ticker. Run the pipeline to generate one.</p>
   {% endif %}
 </section>
 
-<form action="/classify" method="post" class="form">
-  <input type="hidden" name="ticker" value="{{ ticker or '' }}" />
-  <div class="form-control">
-    <label for="values">Feature Values (comma-separated)</label>
-    <input id="values" type="text" name="values" placeholder="e.g. 0.1, 0.2, 0.3, ..." required />
-    <small class="hint">Order must match the expected features above.</small>
-  </div>
-  <div class="form-actions">
-    <button class="btn btn-primary" type="submit">Classify</button>
-    <a class="btn btn-outline" href="/expected-features-class{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Open features JSON</a>
-  </div>
-</form>
 
-{% if result %}
-<section class="panel" style="margin-top:16px">
-  <h3>Result</h3>
-  <p>Probability Up: <strong>{{ '%.4f'|format(result.proba_up) }}</strong></p>
-  <p>Label: <strong>{{ result.label }}</strong> (1 = Up, 0 = Down)</p>
-</section>
-{% endif %}
+<!-- Metrics & Calibration card (separate visual card) -->
+<div class="cards" style="margin-top:12px">
+  <div class="card">
+    <h3>Metrics & Calibration</h3>
+    {% if model_meta and model_meta.get('metrics') %}
+      {% set m = model_meta.get('metrics') %}
+      <div class="detail-kv" style="margin-top:6px">
+        <div class="detail-row"><div class="detail-key">Logloss</div><div class="detail-val">{{ '%.4f'|format(m.get('logloss')) if m.get('logloss') is not none else '—' }}</div></div>
+        <div class="detail-row"><div class="detail-key">AUC</div><div class="detail-val">{{ '%.4f'|format(m.get('auc')) if m.get('auc') is not none else '—' }}</div></div>
+      </div>
+      <div style="margin-top:8px" class="muted">
+        <div><strong>What this tells you</strong></div>
+        <div>- <strong>Logloss</strong>: lower is better; measures how well predicted probabilities match actual outcomes. Very small values can indicate excellent fit or overfitting.</div>
+        <div>- <strong>AUC</strong>: closer to 1.0 is better; measures ranking/separation ability. AUC = 1.0 indicates perfect ordering (watch for overfitting).</div>
+      </div>
+    {% else %}
+      <div class="muted">No model metrics available.</div>
+    {% endif %}
 
+    {% if calibration %}
+      <div style="margin-top:10px">
+        <div class="detail-kv">
+          <div class="detail-row"><div class="detail-key">Prob. band (95%)</div><div class="detail-val">{% if calibration.band %}{{ '%.3f'|format(calibration.band.lower) }}–{{ '%.3f'|format(calibration.band.upper) }} (n={{ calibration.band.n }}){% else %}&mdash;{% endif %}</div></div>
+        </div>
+      </div>
+    {% endif %}
+    
+  </div>
+</div>
+
+
+<!-- Reliability / Calibration curve card (separate) -->
+<div class="cards" style="margin-top:12px">
+  <div class="card">
+    <h3>Reliability / Calibration</h3>
+    {% if reliability %}
+      {% if reliability.brier is not none %}
+        <div class="detail-kv" style="margin-top:6px">
+          <div class="detail-row"><div class="detail-key">Brier</div><div class="detail-val">{{ '%.4f'|format(reliability.brier) }}</div></div>
+          <div class="detail-row"><div class="detail-key">Samples</div><div class="detail-val">{{ reliability.n }}</div></div>
+        </div>
+      {% endif %}
+      <div class="muted" style="margin-top:6px">Shown by probability bin: predicted vs observed frequency.</div>
+      <div style="margin-top:8px">
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          {% for i in range(reliability.prob_pred|length) %}
+            {% set p_pred = reliability.prob_pred[i] %}
+            {% set p_true = reliability.prob_true[i] %}
+            {% set pred_pct = (p_pred if p_pred is not none else 0) * 100 %}
+            {% set true_pct = (p_true if p_true is not none else 0) * 100 %}
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:32px;font-size:12px;color:#fff">#{{ i+1 }}</div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                <div style="height:10px;background:#f1f5ff;border:1px solid #d9e6ff;position:relative">
+                  <div style="height:100%;background:#2b7be4;width:{{ pred_pct }}%;opacity:0.9"></div>
+                  <div style="height:4px;background:#ff7070;position:absolute;left:0;top:3px;width:{{ true_pct }}%;opacity:0.9"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#fff">
+                  <div>pred {{ p_pred is not none and '%.3f'|format(p_pred) or '—' }}</div>
+                  <div>obs {{ p_true is not none and '%.3f'|format(p_true) or '—' }}</div>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <div class="muted">No reliability data available. Run the pipeline or train the model to compute calibration.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script>
+  (function(){
+    try{
+      const defs = {
+        'Close': 'Last traded price at market close for the period — the primary price reference used for returns and indicators.',
+        'High': 'Highest traded price during the session — useful for range analysis and intraday volatility.',
+        'Low': 'Lowest traded price during the session — useful for support/range analysis.',
+        'Open': 'First traded price at session open — used to detect gap moves versus previous close.',
+        'Volume': 'Total traded shares in the period — liquidity measure used to confirm price moves and volume-weighted signals.',
+        'return': 'Arithmetic return for the period: (Close / previous Close − 1). Captures directional percent change.',
+        'log_return': 'Natural-log return: ln(Close / previous Close). Additive over time and preferable for some statistical models.',
+        'sma_5': '5-period simple moving average of Close — short-term trend baseline (price units).',
+        'ema_5': '5-period exponential moving average — short-term trend that weights recent closes more heavily than SMA.',
+        'sma_10': '10-period simple moving average — short-to-intermediate trend reference.',
+        'ema_10': '10-period exponential moving average — responds faster than SMA10 to recent price moves.',
+        'sma_20': '20-period simple moving average — commonly used for intermediate trend filtering.',
+        'ema_20': '20-period exponential moving average — intermediate trend indicator with recency bias.',
+        'vol_10': 'Rolling realized volatility: standard deviation of returns over 10 periods — a short-term risk/volatility proxy.',
+        'rsi_14': 'Relative Strength Index over 14 periods (0–100): momentum oscillator used for overbought/oversold context and divergence.',
+        'macd': 'MACD line (typically 12-EMA minus 26-EMA) — momentum/trend indicator in price units.',
+        'macd_signal': 'MACD signal line (usually a 9-EMA of MACD) — used for crossover signals and trend smoothing.',
+        'macd_hist': 'MACD histogram = MACD − signal — positive values indicate MACD above signal (rising bullish momentum).',
+        'lag_close_1': 'Close price one period prior — preserves raw lagged price information for temporal patterns.',
+        'lag_return_1': 'Return one period prior — recent return used to capture short-term momentum or mean-reversion.',
+        'lag_close_2': 'Close price two periods prior — additional temporal context.',
+        'lag_return_2': 'Return two periods prior — historical return signal at lag 2.',
+        'lag_close_3': 'Close price three periods prior — extended short-term context.',
+        'lag_return_3': 'Return three periods prior — captures slightly older momentum effects.',
+        'lag_close_5': 'Close price five periods prior — useful for weekly-style comparisons in daily data.',
+        'lag_return_5': 'Return five periods prior — longer short-term return used to capture recent trend persistence.'
+      };
+
+      const chips = Array.from(document.querySelectorAll('.feature-chip'));
+      const panel = document.getElementById('featureDetail');
+      const pName = document.getElementById('featureDetailName');
+      const pDef = document.getElementById('featureDetailDef');
+      const btnClose = document.getElementById('featureClose');
+      const btnCopy = document.getElementById('featureCopy');
+
+      chips.forEach(ch => ch.addEventListener('click', (e) => {
+        const feat = ch.getAttribute('data-feature') || ch.title || ch.textContent;
+        pName.textContent = feat;
+        pDef.textContent = defs[feat] || 'No definition available.';
+        panel.style.display = '';
+        panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+      }));
+
+      btnClose && btnClose.addEventListener('click', ()=>{ if(panel) panel.style.display='none'; });
+      btnCopy && btnCopy.addEventListener('click', ()=>{
+        const text = pName.textContent + ' — ' + pDef.textContent;
+        navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : null;
+        btnCopy.textContent = 'Copied';
+        setTimeout(()=> btnCopy.textContent = 'Copy', 1200);
+      });
+    }catch(e){ console.warn('feature token init failed', e); }
+  })();
+</script>
 {% endblock %}

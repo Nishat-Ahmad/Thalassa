@@ -65,7 +65,7 @@ def bootstrap_features(ticker: str = "AAPL", period: str = "2y"):
     """Minimal feature generation to unblock training if Prefect flow hasn't run."""
     if yf is None:
         return
-    df = yf.download(ticker, period=period, progress=False)
+    df = yf.download(ticker, period=period, progress=False, auto_adjust=False)
     if df is None or df.empty:
         return
     df = df.reset_index()

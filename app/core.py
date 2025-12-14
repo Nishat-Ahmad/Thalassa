@@ -50,6 +50,24 @@ def xgb_paths(ticker: str | None = None, run_dir: str | None = None) -> tuple[st
 		# backward compatibility for flat registry
 		model = os.path.join(MODEL_REGISTRY, f"xgb_model_{t}.ubj")
 		meta = os.path.join(MODEL_REGISTRY, f"xgb_model_{t}.json")
+		# If still missing, search timestamped subdirectories under MODEL_REGISTRY/<ticker>
+		if not os.path.exists(model):
+			base = os.path.join(MODEL_REGISTRY, t)
+			try:
+				if os.path.isdir(base):
+					candidates = [os.path.join(base, d) for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))]
+					model_candidates = []
+					for c in candidates:
+						m = os.path.join(c, f"xgb_model_{t}.ubj")
+						mt = os.path.join(c, f"xgb_model_{t}.json")
+						if os.path.exists(m):
+							model_candidates.append((c, m, mt))
+					if model_candidates:
+						best = sorted(model_candidates, key=lambda x: x[0])[-1]
+						model = best[1]
+						meta = best[2]
+			except Exception:
+				pass
 	return model, meta
 
 
@@ -61,6 +79,24 @@ def xgb_classifier_paths(ticker: str | None = None, run_dir: str | None = None) 
 	if run_dir is None and not os.path.exists(model):
 		model = os.path.join(MODEL_REGISTRY, f"xgb_classifier_{t}.ubj")
 		meta = os.path.join(MODEL_REGISTRY, f"xgb_classifier_{t}.json")
+		# If still missing, search timestamped subdirectories under MODEL_REGISTRY/<ticker>
+		if not os.path.exists(model):
+			base = os.path.join(MODEL_REGISTRY, t)
+			try:
+				if os.path.isdir(base):
+					candidates = [os.path.join(base, d) for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))]
+					model_candidates = []
+					for c in candidates:
+						m = os.path.join(c, f"xgb_classifier_{t}.ubj")
+						mt = os.path.join(c, f"xgb_classifier_{t}.json")
+						if os.path.exists(m):
+							model_candidates.append((c, m, mt))
+					if model_candidates:
+						best = sorted(model_candidates, key=lambda x: x[0])[-1]
+						model = best[1]
+						meta = best[2]
+			except Exception:
+				pass
 	return model, meta
 
 

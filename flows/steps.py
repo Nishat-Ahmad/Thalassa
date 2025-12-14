@@ -1,5 +1,7 @@
 from prefect import task
 import os, pandas as pd, numpy as np, json
+import warnings
+import logging
 import yfinance as yf
 from datetime import datetime, UTC
 from subprocess import Popen, PIPE
@@ -35,15 +37,38 @@ def _ticker_from_path(path: str) -> str:
 
 @task(retries=2, retry_delay_seconds=10)
 def ingest(ticker: str, period: str = "max"):
-    df = yf.download(ticker, period=period, progress=False)
-    df.reset_index(inplace=True)
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = [c[0] if isinstance(c, tuple) else str(c) for c in df.columns]
-    df.rename(columns={"Date": "date", "Adj Close": "Adj_Close"}, inplace=True)
-    df["ticker"] = ticker
-    path = os.path.join(DATA_DIR, f"{ticker}.parquet")
-    df.to_parquet(path)
-    return path
+    logger = logging.getLogger(__name__)
+    max_attempts = 4
+    timeout = 30
+    last_err = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            df = yf.download(ticker, period=period, progress=False, timeout=timeout, auto_adjust=False)
+            if df is None or df.empty:
+                raise RuntimeError(f"yfinance returned empty dataframe for {ticker}")
+            # success
+            df.reset_index(inplace=True)
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [c[0] if isinstance(c, tuple) else str(c) for c in df.columns]
+            df.rename(columns={"Date": "date", "Adj Close": "Adj_Close"}, inplace=True)
+            df["ticker"] = ticker
+            path = os.path.join(DATA_DIR, f"{ticker}.parquet")
+            df.to_parquet(path)
+            return path
+        except Exception as e:
+            last_err = e
+            logger.warning("yfinance download failed for %s (attempt %d/%d): %s", ticker, attempt, max_attempts, e)
+            if attempt < max_attempts:
+                backoff = 2 ** (attempt - 1)
+                try:
+                    import time
+
+                    time.sleep(backoff)
+                except Exception:
+                    pass
+            else:
+                # final failure: raise to let Prefect handle retries / failures
+                raise RuntimeError(f"Failed to download data for {ticker} after {max_attempts} attempts: {last_err}")
 
 @task
 def engineer(data_path: str):
@@ -295,20 +320,57 @@ def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.dropna(subset=["date"])
     series = df.set_index("date")["Close"].astype(float).sort_index()
-    freq = pd.infer_freq(series.index)
+    # Need at least 3 dates to infer a frequency; if not available, skip forecasting
+    if len(series.index) < 3:
+        return {"status": "skipped", "reason": "insufficient dates to infer frequency for forecasting"}
+    try:
+        freq = pd.infer_freq(series.index)
+    except Exception:
+        freq = None
     if freq is None:
+        # fallback to daily frequency but only if index has reasonable spacing
         freq = "D"
     series = series.asfreq(freq).ffill()
     order = (1, 1, 1)
+    logger = logging.getLogger(__name__)
     try:
         # disable automatic re-parameterization enforcement to avoid
         # "Non-stationary starting autoregressive" / "Non-invertible starting MA" warnings
         model = ARIMA(series, order=order, enforce_stationarity=False, enforce_invertibility=False)
-        fitted = model.fit()
+
+        fitted = None
+        # Primary attempt: increase max iterations and capture warnings
+        try:
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                fitted = model.fit(method_kwargs={"maxiter": 500})
+                if w:
+                    logger.warning("ARIMA fit produced warnings: %s", [str(x.message) for x in w])
+                logger.debug("ARIMA mle_retvals (primary): %s", getattr(fitted, "mle_retvals", None))
+        except Exception as e1:
+            logger.warning("Primary ARIMA fit failed: %s", e1)
+            # Fallback: try a different optimizer with more iterations
+            try:
+                with warnings.catch_warnings(record=True) as w2:
+                    warnings.simplefilter("always")
+                    fitted = model.fit(method="nm", method_kwargs={"maxiter": 1000})
+                    if w2:
+                        logger.warning("ARIMA fallback fit produced warnings: %s", [str(x.message) for x in w2])
+                    logger.debug("ARIMA mle_retvals (fallback): %s", getattr(fitted, "mle_retvals", None))
+            except Exception as e2:
+                logger.exception("ARIMA fit fallback failed: %s", e2)
+                # Return a clear skipped result so the pipeline can continue
+                return {"status": "skipped", "reason": f"ARIMA fit failed: {e1}; {e2}"}
+
+        # At this point we should have a fitted model
+        if fitted is None:
+            return {"status": "skipped", "reason": "ARIMA fit did not produce a fitted model"}
+
         forecast = fitted.forecast(steps=horizon)
         conf_res = fitted.get_forecast(steps=horizon)
         conf = conf_res.conf_int()
     except Exception as e:
+        logger.exception("Unexpected error during ARIMA forecasting: %s", e)
         return {"status": "error", "message": str(e)}
     last_date = series.index[-1]
     idx = pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq=freq or "D")
@@ -331,3 +393,55 @@ def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None)
     with open(os.path.join(target_dir, f"forecast_{ticker}.json"), "w") as f:
         json.dump(out, f)
     return {"status": "ok", "forecast": out}
+
+
+@task
+def predict_next(feature_path: str, run_dir: str | None = None):
+    """Load the classifier from the run_dir (or registry) and predict the next-day label
+    using the latest row of features. Saves a JSON result file in the target dir.
+    """
+    if xgb is None:
+        return {"status": "skipped", "reason": "xgboost not available"}
+    df = pd.read_parquet(feature_path).sort_values("date")
+    if df.empty:
+        return {"status": "skipped", "reason": "no data in features"}
+    ticker = _ticker_from_path(feature_path)
+    target_dir = run_dir or os.path.join(REGISTRY_DIR, ticker)
+    os.makedirs(target_dir, exist_ok=True)
+    model_path = os.path.join(target_dir, f"xgb_classifier_{ticker}.ubj")
+    meta_path = os.path.join(target_dir, f"xgb_classifier_{ticker}.json")
+    # fallback to flat registry if needed
+    if not os.path.exists(model_path) or not os.path.exists(meta_path):
+        model_path = os.path.join(REGISTRY_DIR, f"xgb_classifier_{ticker}.ubj")
+        meta_path = os.path.join(REGISTRY_DIR, f"xgb_classifier_{ticker}.json")
+    if not os.path.exists(model_path) or not os.path.exists(meta_path):
+        return {"status": "skipped", "reason": "classifier artifact not found"}
+    try:
+        booster = xgb.Booster()
+        booster.load_model(model_path)
+        with open(meta_path, "r") as f:
+            meta = json.load(f)
+        feats = meta.get("features", [])
+        # ensure features exist in df
+        missing = [c for c in feats if c not in df.columns]
+        if missing:
+            return {"status": "skipped", "reason": f"missing features in feature file: {missing}"}
+        last_row = df.iloc[-1]
+        vals = [float(last_row[c]) for c in feats]
+        dmatrix = xgb.DMatrix(pd.DataFrame([vals], columns=feats))
+        proba = float(booster.predict(dmatrix)[0])
+        label = int(proba >= 0.5)
+        out = {
+            "ticker": ticker,
+            "source_date": str(last_row.get("date", "")),
+            "proba_up": proba,
+            "label": label,
+            "features": feats,
+            "values": vals,
+        }
+        out_path = os.path.join(target_dir, f"predict_next_{ticker}.json")
+        with open(out_path, "w") as f:
+            json.dump(out, f)
+        return {"status": "ok", "prediction_path": out_path, "prediction": out}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

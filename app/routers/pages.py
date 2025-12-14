@@ -25,6 +25,21 @@ except Exception:
 router = APIRouter()
 
 
+def _prob_band(p: float, n: int | None, z: float = 1.96):
+    try:
+        p = float(p)
+    except Exception:
+        return None
+    N = int(n) if (n and int(n) > 0) else None
+    if N is None or N <= 0:
+        # fallback effective sample size
+        N = 50
+    se = (p * (1.0 - p) / max(1, N)) ** 0.5
+    lo = max(0.0, p - z * se)
+    hi = min(1.0, p + z * se)
+    return {"lower": lo, "upper": hi, "n": N, "alpha": 0.05}
+
+
 def _safe_ticker(ticker: str | None) -> str:
     return (ticker or "AAPL").upper()
 
@@ -43,7 +58,27 @@ def search_page(request: Request, ticker: str | None = None, period: str | None 
     ticker_info = None
     recent = None
     error = None
-    suggestions = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "JPM", "V", "NFLX"]
+    # include popular equities and top crypto tickers (Yahoo Finance symbols)
+    suggestions = [
+        "AAPL",
+        "MSFT",
+        "GOOGL",
+        "AMZN",
+        "NVDA",
+        "META",
+        "TSLA",
+        "JPM",
+        "V",
+        "NFLX",
+        # crypto
+        "BTC-USD",
+        "ETH-USD",
+        "USDT-USD",
+        "BNB-USD",
+        "XRP-USD",
+        "USDC-USD",
+        "SOL-USD",
+    ]
     period_map = {
         "1w": "7d",
         "1mo": "1mo",
@@ -201,13 +236,164 @@ def classify_page(request: Request, ticker: str | None = None):
     t = _safe_ticker(ticker)
     _, cls_meta_path = xgb_classifier_paths(t)
     feats = []
+    model_meta = None
+    tokens = {}
     if os.path.exists(cls_meta_path):
         with open(cls_meta_path, "r") as f:
             meta = json.load(f)
         feats = [str(f) for f in meta.get("features", [])]
+        model_meta = meta
+        # build short tokens for UI (same logic as cluster/pca pages)
+        try:
+            for f in feats:
+                parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+                if parts:
+                    tok = ''.join([p[0] for p in parts]).upper()
+                    tokens[f] = tok if len(tok) <= 6 else tok[:6]
+                else:
+                    tokens[f] = str(f)[:6]
+        except Exception:
+            tokens = {f: str(f)[:6] for f in feats}
+    # attempt to locate pipeline-produced next-day prediction JSON
+    prediction = None
+    try:
+        base = os.path.join(MODEL_REGISTRY, t)
+        if os.path.isdir(base):
+            candidates = [os.path.join(base, d) for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))]
+            preds = []
+            for c in candidates:
+                p = os.path.join(c, f"predict_next_{t}.json")
+                if os.path.exists(p):
+                    preds.append((c, p))
+            if preds:
+                best = sorted(preds, key=lambda x: x[0])[-1]
+                try:
+                    with open(best[1], "r") as pf:
+                        prediction = json.load(pf)
+                except Exception:
+                    prediction = None
+    except Exception:
+        prediction = None
+    # fallback to flat registry
+    if prediction is None:
+        flat = os.path.join(MODEL_REGISTRY, f"predict_next_{t}.json")
+        if os.path.exists(flat):
+            try:
+                with open(flat, "r") as pf:
+                    prediction = json.load(pf)
+            except Exception:
+                prediction = None
+    # compute probability band and calibration hints if we have a prediction
+    calibration = None
+    try:
+        if prediction and isinstance(prediction, dict) and prediction.get("proba_up") is not None:
+            samples = model_meta.get("samples") if isinstance(model_meta, dict) else None
+            band = _prob_band(prediction.get("proba_up"), samples)
+            calibration = {
+                "band": band,
+                "auc": (model_meta.get("metrics", {}).get("auc") if isinstance(model_meta, dict) else None),
+                "logloss": (model_meta.get("metrics", {}).get("logloss") if isinstance(model_meta, dict) else None),
+            }
+    except Exception:
+        calibration = None
+    # compute reliability curve (calibration curve) using available features+labels if possible
+    reliability = None
+    try:
+        feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+        if os.path.exists(feat_path):
+            df_feats = pd.read_parquet(feat_path)
+            # derive a simple next-day label similar to training: next-close > close
+            if "log_return" in df_feats.columns:
+                ret = df_feats["log_return"]
+            elif "Close" in df_feats.columns:
+                close = pd.to_numeric(df_feats["Close"], errors="coerce")
+                ret = (close.shift(-1) - close) / close
+            else:
+                ret = None
+            if ret is not None:
+                valid = ~pd.isna(ret)
+                dfx = df_feats.loc[valid].copy()
+                y = (ret[valid] > 0).astype(int).to_numpy()
+                # pick numeric columns as a conservative feature set
+                X = dfx.select_dtypes(include=[np.number]).copy()
+                if "log_return" in X.columns:
+                    X = X.drop(columns=["log_return"]) 
+                X = X.replace([np.inf, -np.inf], np.nan)
+                try:
+                    X = X.fillna(method="ffill").fillna(method="bfill")
+                except Exception:
+                    pass
+                # final NaN fill per-column
+                for c in X.columns:
+                    if X[c].isna().any():
+                        try:
+                            med = float(X[c].median(skipna=True))
+                            if np.isnan(med):
+                                med = 0.0
+                        except Exception:
+                            med = 0.0
+                        X[c] = X[c].fillna(med)
+                # try loading classifier and scoring
+                try:
+                    cls_model_path, _ = xgb_classifier_paths(t)
+                    if xgb is not None and os.path.exists(cls_model_path):
+                        booster = xgb.Booster()
+                        booster.load_model(cls_model_path)
+                        dmat = xgb.DMatrix(X)
+                        probs = booster.predict(dmat)
+                        # brier score
+                        brier = None
+                        try:
+                            from sklearn.metrics import brier_score_loss
+
+                            brier = float(brier_score_loss(y, probs))
+                        except Exception:
+                            brier = None
+                        # calibration curve (sklearn) with fallback to manual binning
+                        try:
+                            from sklearn.calibration import calibration_curve
+
+                            prob_true, prob_pred = calibration_curve(y, probs, n_bins=10, strategy="uniform")
+                        except Exception:
+                            bins = np.linspace(0.0, 1.0, 11)
+                            inds = np.digitize(probs, bins) - 1
+                            prob_true = []
+                            prob_pred = []
+                            for i in range(10):
+                                sel = inds == i
+                                if sel.sum() == 0:
+                                    prob_true.append(np.nan)
+                                    prob_pred.append((bins[i] + bins[i+1]) / 2.0)
+                                else:
+                                    prob_true.append(float(np.mean(y[sel])))
+                                    prob_pred.append(float(np.mean(probs[sel])))
+                            prob_true = np.array(prob_true)
+                            prob_pred = np.array(prob_pred)
+                        reliability = {
+                            "prob_true": [None if np.isnan(x) else float(x) for x in prob_true.tolist()],
+                            "prob_pred": [float(x) for x in prob_pred.tolist()],
+                            "brier": brier,
+                            "n": int(len(y)),
+                            "source": "training",
+                        }
+                except Exception:
+                    reliability = None
+    except Exception:
+        reliability = None
     return templates.TemplateResponse(
         "classify.html",
-        {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feats, "ticker": t},
+        {
+            "request": request,
+            "title": "Classify",
+            "year": datetime.datetime.now().year,
+            "features": feats,
+            "ticker": t,
+            "prediction": prediction,
+            "model_meta": model_meta,
+            "calibration": calibration,
+            "reliability": reliability,
+            "tokens": tokens,
+        },
     )
 
 @router.post("/classify", response_class=HTMLResponse)
@@ -217,24 +403,36 @@ def classify_submit(request: Request, values: str = Form(...), ticker: str | Non
     if xgb is None or not (os.path.exists(cls_meta_path) and os.path.exists(cls_model_path)):
         return templates.TemplateResponse(
             "classify.html",
-            {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": [], "result": None, "ticker": t},
+            {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": [], "result": None, "ticker": t, "model_meta": None, "tokens": {}},
         )
     booster = xgb.Booster()
     booster.load_model(cls_model_path)
     with open(cls_meta_path, "r") as f:
         meta = json.load(f)
     feat_names = [str(f) for f in meta.get("features", [])]
+    # build short tokens for UI (same logic as classify_page)
+    tokens = {}
+    try:
+        for f in feat_names:
+            parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+            if parts:
+                tok = ''.join([p[0] for p in parts]).upper()
+                tokens[f] = tok if len(tok) <= 6 else tok[:6]
+            else:
+                tokens[f] = str(f)[:6]
+    except Exception:
+        tokens = {f: str(f)[:6] for f in feat_names}
     try:
         nums = [float(x.strip()) for x in values.split(",") if x.strip() != ""]
     except Exception:
         return templates.TemplateResponse(
             "classify.html",
-            {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": None, "ticker": t},
+            {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": None, "ticker": t, "tokens": tokens, "model_meta": meta},
         )
     if len(nums) != len(feat_names):
         return templates.TemplateResponse(
             "classify.html",
-            {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": None, "ticker": t},
+            {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": None, "ticker": t, "model_meta": meta, "tokens": tokens},
         )
     df = pd.DataFrame([nums], columns=[f.strip() for f in feat_names])
     dmatrix = xgb.DMatrix(df)
@@ -242,7 +440,7 @@ def classify_submit(request: Request, values: str = Form(...), ticker: str | Non
     result = {"proba_up": proba, "label": int(proba >= 0.5)}
     return templates.TemplateResponse(
         "classify.html",
-        {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": result, "ticker": t},
+        {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": result, "ticker": t, "model_meta": meta, "tokens": tokens},
     )
 
 @router.get("/pca", response_class=HTMLResponse)

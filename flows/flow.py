@@ -26,6 +26,12 @@ def pipeline(ticker: str = "AAPL", run_dir: str | None = None):
     m = train_regressor(f, run_dir=run_dir)
     cls = train_classification(f, run_dir=run_dir)
     assoc = train_association_rules(f, run_dir=run_dir)
+    # After classification training, produce a next-day prediction using the latest features
+    try:
+        from .steps import predict_next
+        pred = predict_next(f, run_dir=run_dir)
+    except Exception:
+        pred = {"status": "skipped", "reason": "predict_next not available"}
     # Compute clusters from raw features first to avoid using PCA-transformed features
     clusters = cluster_features(f, run_dir=run_dir)
     pca = compute_pca(f, run_dir=run_dir)
@@ -34,6 +40,7 @@ def pipeline(ticker: str = "AAPL", run_dir: str | None = None):
         "regression": m,
         "classification": cls,
         "association": assoc,
+        "prediction": pred,
         "pca": pca,
         "clusters": clusters,
         "forecast": fc,
