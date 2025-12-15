@@ -981,15 +981,43 @@ def recommend(date: str | None = Query(None), k: int = Query(5, gt=0, le=50), ti
     nn_idx = np.argsort(dists)[:k]
     feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
     closes = {}
+    next_returns_map = {}
     if os.path.exists(feat_path):
         fdf = pd.read_parquet(feat_path)
         fdf["date"] = pd.to_datetime(fdf["date"]).dt.strftime("%Y-%m-%d")
-        closes = dict(zip(fdf["date"], fdf.get("Close", pd.Series([None]*len(fdf)))))
-    neighbors = [
-        {"date": row_index[i], "distance": float(dists[i]), "close": (None if closes == {} else float(closes.get(row_index[i])) if closes.get(row_index[i]) is not None else None)}
-        for i in nn_idx
-    ]
-    return {"target_date": date, "k": k, "neighbors": neighbors}
+        if "Close" in fdf.columns:
+            fdf["Close"] = pd.to_numeric(fdf["Close"], errors="coerce")
+            fdf["next_close"] = fdf["Close"].shift(-1)
+            fdf["next_return"] = (fdf["next_close"] - fdf["Close"]) / fdf["Close"]
+            closes = dict(zip(fdf["date"], fdf.get("Close", pd.Series([None] * len(fdf)))))
+            next_returns_map = dict(zip(fdf["date"], fdf.get("next_return", pd.Series([None] * len(fdf)))))
+        else:
+            closes = dict(zip(fdf["date"], pd.Series([None] * len(fdf))))
+
+    neighbors = []
+    for i in nn_idx:
+        d = float(dists[i])
+        dt = row_index[i]
+        close_val = None
+        if closes:
+            c = closes.get(dt)
+            close_val = None if c is None else float(c)
+        nr = None
+        if next_returns_map:
+            v = next_returns_map.get(dt)
+            nr = None if v is None or (isinstance(v, float) and (np.isnan(v))) else float(v)
+        neighbors.append({"date": dt, "distance": d, "close": close_val, "next_return": nr})
+
+    # summary stats for neighbors' next-day returns
+    nr_vals = [n["next_return"] for n in neighbors if n.get("next_return") is not None]
+    if nr_vals:
+        avg_nr = float(np.mean(nr_vals))
+        med_nr = float(np.median(nr_vals))
+        std_nr = float(np.std(nr_vals))
+    else:
+        avg_nr = med_nr = std_nr = None
+
+    return {"target_date": date, "k": k, "neighbors": neighbors, "avg_next_return": avg_nr, "median_next_return": med_nr, "std_next_return": std_nr}
 
 @router.post("/recommend")
 def recommend_from_features(req: PredictRequest, k: int = Query(5, gt=0, le=50), ticker: str = Query("AAPL")):
@@ -1016,11 +1044,43 @@ def recommend_from_features(req: PredictRequest, k: int = Query(5, gt=0, le=50),
         raise HTTPException(status_code=500, detail="Row index missing or misaligned in PCA metadata")
     dists = np.linalg.norm(comps - z, axis=1)
     nn_idx = np.argsort(dists)[:k]
-    neighbors = [
-        {"date": row_index[i], "distance": float(dists[i])}
-        for i in nn_idx
-    ]
-    return {"k": k, "neighbors": neighbors}
+
+    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    next_returns_map = {}
+    closes = {}
+    if os.path.exists(feat_path):
+        fdf = pd.read_parquet(feat_path)
+        fdf["date"] = pd.to_datetime(fdf["date"]).dt.strftime("%Y-%m-%d")
+        if "Close" in fdf.columns:
+            fdf["Close"] = pd.to_numeric(fdf["Close"], errors="coerce")
+            fdf["next_close"] = fdf["Close"].shift(-1)
+            fdf["next_return"] = (fdf["next_close"] - fdf["Close"]) / fdf["Close"]
+            next_returns_map = dict(zip(fdf["date"], fdf.get("next_return", pd.Series([None] * len(fdf)))))
+            closes = dict(zip(fdf["date"], fdf.get("Close", pd.Series([None] * len(fdf)))))
+
+    neighbors = []
+    for i in nn_idx:
+        dt = row_index[i]
+        d = float(dists[i])
+        close_val = None
+        if closes:
+            c = closes.get(dt)
+            close_val = None if c is None else float(c)
+        nr = None
+        if next_returns_map:
+            v = next_returns_map.get(dt)
+            nr = None if v is None or (isinstance(v, float) and (np.isnan(v))) else float(v)
+        neighbors.append({"date": dt, "distance": d, "close": close_val, "next_return": nr})
+
+    nr_vals = [n["next_return"] for n in neighbors if n.get("next_return") is not None]
+    if nr_vals:
+        avg_nr = float(np.mean(nr_vals))
+        med_nr = float(np.median(nr_vals))
+        std_nr = float(np.std(nr_vals))
+    else:
+        avg_nr = med_nr = std_nr = None
+
+    return {"k": k, "neighbors": neighbors, "avg_next_return": avg_nr, "median_next_return": med_nr, "std_next_return": std_nr}
 
 @router.get("/association-info")
 def association_info(ticker: str = Query("AAPL")):

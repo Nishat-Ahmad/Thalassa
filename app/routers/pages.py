@@ -721,6 +721,30 @@ def recommend_page(request: Request, ticker: str | None = None):
             error = f"Failed to load PCA metadata: {e}"
     else:
         error = "PCA artifacts not found. Run the pipeline to generate them."
+    # prepare short tokens for UI (same style as cluster/pca pages)
+    tokens = {}
+    try:
+        for f in features:
+            parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+            if parts:
+                tok = ''.join([p[0] for p in parts]).upper()
+                tokens[f] = tok if len(tok) <= 6 else tok[:6]
+            else:
+                tokens[f] = str(f)[:6]
+    except Exception:
+        tokens = {f: str(f)[:6] for f in features}
+    # prepare short tokens for UI (same style as cluster/pca pages)
+    tokens = {}
+    try:
+        for f in features:
+            parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+            if parts:
+                tok = ''.join([p[0] for p in parts]).upper()
+                tokens[f] = tok if len(tok) <= 6 else tok[:6]
+            else:
+                tokens[f] = str(f)[:6]
+    except Exception:
+        tokens = {f: str(f)[:6] for f in features}
     return templates.TemplateResponse(
         "recommend.html",
         {
@@ -730,6 +754,7 @@ def recommend_page(request: Request, ticker: str | None = None):
             "dates": dates,
             "features": features,
             "neighbors": None,
+            "tokens": tokens,
             "error": error,
             "ticker": t,
         },
@@ -798,11 +823,39 @@ def recommend_page_submit(
                 nn_idx = np.argsort(dists)[:k]
                 feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
                 closes = {}
+                next_returns_map = {}
                 if os.path.exists(feat_path):
                     fdf = pd.read_parquet(feat_path)
                     fdf["date"] = pd.to_datetime(fdf["date"]).dt.strftime("%Y-%m-%d")
-                    closes = dict(zip(fdf["date"], fdf.get("Close", pd.Series([None]*len(fdf)))))
-                neighbors = [{"date": row_index[i], "distance": float(dists[i]), "close": (None if closes == {} else float(closes.get(row_index[i])) if closes.get(row_index[i]) is not None else None)} for i in nn_idx]
+                    if "Close" in fdf.columns:
+                        fdf["Close"] = pd.to_numeric(fdf["Close"], errors="coerce")
+                        fdf["next_close"] = fdf["Close"].shift(-1)
+                        fdf["next_return"] = (fdf["next_close"] - fdf["Close"]) / fdf["Close"]
+                        closes = dict(zip(fdf["date"], fdf.get("Close", pd.Series([None] * len(fdf)))))
+                        next_returns_map = dict(zip(fdf["date"], fdf.get("next_return", pd.Series([None] * len(fdf)))))
+                    else:
+                        closes = dict(zip(fdf["date"], pd.Series([None] * len(fdf))))
+                neighbors = []
+                for i in nn_idx:
+                    dt = row_index[i]
+                    dval = float(dists[i])
+                    close_val = None
+                    if closes:
+                        c = closes.get(dt)
+                        close_val = None if c is None else float(c)
+                    nr = None
+                    if next_returns_map:
+                        v = next_returns_map.get(dt)
+                        nr = None if v is None or (isinstance(v, float) and (np.isnan(v))) else float(v)
+                    neighbors.append({"date": dt, "distance": dval, "close": close_val, "next_return": nr})
+                # compute neighbor next-day return summary stats (if available)
+                nr_vals = [n.get("next_return") for n in neighbors if n.get("next_return") is not None]
+                if nr_vals:
+                    avg_next = float(np.mean(nr_vals))
+                    med_next = float(np.median(nr_vals))
+                    std_next = float(np.std(nr_vals))
+                else:
+                    avg_next = med_next = std_next = None
     return templates.TemplateResponse(
         "recommend.html",
         {
@@ -812,6 +865,10 @@ def recommend_page_submit(
             "dates": dates,
             "features": features,
             "neighbors": neighbors,
+            "avg_next_return": (avg_next if 'avg_next' in locals() else None),
+            "median_next_return": (med_next if 'med_next' in locals() else None),
+            "std_next_return": (std_next if 'std_next' in locals() else None),
+            "tokens": (locals().get('tokens') if 'tokens' in locals() else {}),
             "error": error,
             "selected_date": date,
             "mode": mode,

@@ -12,6 +12,8 @@
 	--card: #0f6d66;
 	--accent: #0fa4b1;
 	--shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  --glass: rgba(255,255,255,0.03);
+  --muted-2: rgba(255,255,255,0.6);
 }
 
 * { box-sizing: border-box; }
@@ -165,10 +167,84 @@ body > .footer { flex: 0 0 auto; margin-top: auto; }
 
 /* Buttons */
 .btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: transparent; color: var(--text); padding: 10px 14px; border-radius: 10px; text-decoration: none; cursor: pointer; transition: 0.15s ease-in-out; }
-.btn:hover { border-color: var(--primary-600); background: rgba(10,141,160,0.16); }
-.btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
-.btn-primary:hover { background: var(--primary-600); border-color: var(--primary-600); }
+.btn:hover { border-color: var(--primary-600); background: linear-gradient(90deg, rgba(25,211,197,0.06), rgba(15,164,177,0.04)); transform: translateY(-1px); }
+.btn-primary { background: linear-gradient(180deg,var(--primary),var(--primary-600)); border-color: transparent; color: #052021; box-shadow: 0 8px 20px rgba(15,156,148,0.12); }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 14px 34px rgba(15,156,148,0.14); }
 .btn-outline { background: transparent; border-color: var(--border); }
+
+/* Modern form controls */
+input[type="text"], input[type="number"], select, textarea {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border: 1px solid rgba(255,255,255,0.06);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 10px;
+  outline: none;
+  transition: box-shadow 160ms ease, border-color 160ms ease, transform 120ms ease;
+}
+input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
+  border-color: var(--primary-600);
+  box-shadow: 0 8px 20px rgba(15,156,148,0.08);
+  transform: translateY(-1px);
+}
+
+/* Dropdown fixes: ensure options and selects remain readable on dark theme */
+select {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  color: var(--text);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Some browsers don't inherit option colors reliably; force readable text/background */
+select option {
+  color: var(--text) !important;
+  background: var(--bg-elev) !important;
+}
+
+/* For Windows/Edge: hide default dropdown arrow so custom styles are consistent */
+select::-ms-expand { display: none; }
+
+/* Place a small right-side padding so the native caret doesn't overlap text */
+select { padding-right: 28px; }
+
+/* Feature chips */
+.feature-tokens { display:flex; gap:8px; flex-wrap:wrap; }
+.feature-chip {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00));
+  border: 1px solid rgba(255,255,255,0.04);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+.feature-chip:hover { transform: translateY(-3px); box-shadow: 0 10px 26px rgba(0,0,0,0.18); }
+
+/* Feature detail panel */
+#featureDetail { border: 1px solid rgba(255,255,255,0.04); background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0)); padding:12px; border-radius:12px; }
+
+/* Card row styling: ensure nice spacing and wrap on small screens */
+.card-row { display:flex; gap:16px; align-items:flex-start; }
+.card-row section.panel { flex:1 1 0; min-width:200px; }
+@media (max-width: 920px) {
+  .card-row { flex-direction: column; }
+}
+
+/* Slightly lift panels visually */
+.panel { background: linear-gradient(180deg, rgba(20,60,60,0.34), rgba(10,30,30,0.22)); border: 1px solid rgba(255,255,255,0.04); border-radius: 14px; padding: 18px; margin: 18px 0; box-shadow: 0 10px 30px rgba(0,0,0,0.18); }
+
+/* Model summary grid */
+.model-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  align-items: center;
+}
+.model-summary-grid .ms-key { color: var(--muted); font-weight:700; font-size:0. nine rem; }
+.model-summary-grid .ms-val { font-weight:700; color:var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace; }
+.pill { display:inline-block; padding:6px 10px; border-radius:999px; background: rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.03); font-weight:700; }
 
 /* Sections */
 .section-header { margin: 6px 0 18px; }

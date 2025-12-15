@@ -10,10 +10,43 @@
   {% if error %}<p class="alert">{{ error }}</p>{% endif %}
 </section>
 
-<div class="grid">
-  <div class="panel">
+
+<div class="card-row" style="display:flex;gap:16px;align-items:flex-start;margin-top:16px;">
+  <section class="panel" style="flex:1;min-width:220px;">
+    <h3>Model Summary</h3>
+    <div id="modelSummaryContent" class="muted">Loading model information…</div>
+  </section>
+
+  <section class="panel" style="flex:1;min-width:320px;">
+    <h3>PCA Feature Order</h3>
+    {% if features %}
+      <p class="muted">Inputs expected ({{ features|length }} features)</p>
+      <div class="feature-tokens" style="margin-top:8px">
+        {% for f in features %}
+          <span class="feature-chip" title="{{ f }}" data-feature="{{ f }}">{{ tokens.get(f, f[:6]) }}</span>
+        {% endfor %}
+      </div>
+
+      <div id="featureDetail" class="panel" style="display:none; margin-top:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <div id="featureDetailName" style="font-weight:700"></div>
+            <div id="featureDetailDef" class="muted" style="margin-top:6px"></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="featureCopy" class="btn small">Copy</button>
+            <button id="featureClose" class="btn small btn-outline">Close</button>
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <p class="muted">Feature order not available. Run the pipeline.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel" style="flex:1;min-width:300px;">
     <h3>By Date</h3>
-    <form action="/recommend-page" method="post" class="form">
+    <form action="/recommend-page{% if ticker %}?ticker={{ ticker }}{% endif %}" method="post" class="form">
       <input type="hidden" name="ticker" value="{{ ticker or '' }}" />
       <input type="hidden" name="mode" value="date" />
       <div class="form-control">
@@ -33,12 +66,15 @@
         <button class="btn btn-primary" type="submit">Find Neighbors</button>
       </div>
     </form>
-  </div>
+  </section>
+</div>
 
+<!-- Keep By Feature Vector below the horizontal row -->
+<div style="margin-top:16px">
   <div class="panel">
     <h3>By Feature Vector</h3>
-    <p class="muted">Paste comma-separated values matching the PCA feature order (shown below).</p>
-    <form action="/recommend-page" method="post" class="form">
+    <p class="muted">Paste comma-separated values matching the PCA feature order (shown above).</p>
+    <form action="/recommend-page{% if ticker %}?ticker={{ ticker }}{% endif %}" method="post" class="form">
       <input type="hidden" name="ticker" value="{{ ticker or '' }}" />
       <input type="hidden" name="mode" value="vector" />
       <div class="form-control">
@@ -57,15 +93,6 @@
   </div>
 </div>
 
-<section class="panel" style="margin-top:16px">
-  <h3>PCA Feature Order</h3>
-  {% if features %}
-    <code style="display:block;white-space:pre-wrap">{{ features|join(', ') }}</code>
-  {% else %}
-    <p class="muted">Feature order not available. Run the pipeline.</p>
-  {% endif %}
-</section>
-
 {% if neighbors %}
 <section class="panel" style="margin-top:16px">
   <h3>Neighbors</h3>
@@ -77,6 +104,237 @@
       </li>
     {% endfor %}
   </ul>
+  <div class="panel" style="margin-top:12px">
+    <h4>Estimated next-day return (neighbors)</h4>
+    {% if avg_next_return is not none %}
+      <p>Average: {{ '%.4f'|format(avg_next_return) }} — Median: {{ '%.4f'|format(median_next_return) }} — Std: {{ '%.4f'|format(std_next_return) }}</p>
+      <ul>
+        {% for n in neighbors %}
+          <li>{{ n.date }}: {% if n.next_return is not none %}{{ '%.4f'|format(n.next_return) }}{% else %}N/A{% endif %}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No next-day return data available for neighbors.</p>
+    {% endif %}
+  </div>
 {% endif %}
 
+{% if neighbors %}
+<section id="nextReturnDistPanel" class="panel" style="margin-top:16px">
+  <h3>Next-day Return Distribution (neighbors)</h3>
+  <div id="nrStats" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+    <div class="pill">Avg: <strong id="nrAvg">{{ avg_next_return is not none and ('%.4f'|format(avg_next_return)) or 'N/A' }}</strong></div>
+    <div class="pill">Median: <strong id="nrMedian">{{ median_next_return is not none and ('%.4f'|format(median_next_return)) or 'N/A' }}</strong></div>
+    <div class="pill">Std: <strong id="nrStd">{{ std_next_return is not none and ('%.4f'|format(std_next_return)) or 'N/A' }}</strong></div>
+    <div class="pill">Min: <strong id="nrMin">N/A</strong></div>
+    <div class="pill">Max: <strong id="nrMax">N/A</strong></div>
+    <div class="pill">% Positive: <strong id="nrPos">N/A</strong></div>
+  </div>
+
+  <div id="nrHistogram" style="display:flex;gap:8px;align-items:end;height:120px"></div>
+  <div id="nrHistogramLabels" style="display:flex;gap:8px;align-items:center;margin-top:6px;color:var(--muted);font-size:0.85rem"></div>
+  <div id="nrHistogramCounts" style="display:flex;gap:8px;align-items:center;margin-top:6px;color:var(--muted);font-size:0.85rem"></div>
+  <div id="nrBucketsLegend" style="margin-top:8px;color:var(--muted);font-size:0.9rem"></div>
+  <div id="nrList" style="margin-top:10px"></div>
+</section>
+
+<script>
+try{
+  const neighborsData = {{ neighbors|tojson }};
+  const vals = neighborsData.map(n => (n.next_return === null || n.next_return === undefined) ? null : Number(n.next_return)).filter(v => v !== null && !isNaN(v));
+  const elMin = document.getElementById('nrMin');
+  const elMax = document.getElementById('nrMax');
+  const elPos = document.getElementById('nrPos');
+  const histEl = document.getElementById('nrHistogram');
+  const legend = document.getElementById('nrBucketsLegend');
+  const listEl = document.getElementById('nrList');
+
+  if(vals.length === 0){
+    listEl.innerHTML = '<div class="muted">No next-day return data available for neighbors.</div>';
+  } else {
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    elMin.textContent = min.toFixed(4);
+    elMax.textContent = max.toFixed(4);
+    elPos.textContent = Math.round(100 * (vals.filter(x=>x>0).length / vals.length)) + '%';
+
+    // build 5 bins
+    const bins = 5;
+    const width = (max - min) || 1e-6;
+    const counts = new Array(bins).fill(0);
+    vals.forEach(v => {
+      let idx = Math.floor(((v - min) / width) * bins);
+      if(idx < 0) idx = 0;
+      if(idx >= bins) idx = bins - 1;
+      counts[idx]++;
+    });
+    const maxCount = Math.max(...counts);
+    histEl.innerHTML = '';
+    for(let i=0;i<bins;i++){
+      const bar = document.createElement('div');
+      bar.style.flex = '1';
+      // ensure each bar fills the histogram container height so inner percentage is relative to it
+      bar.style.height = '100%';
+      bar.style.display = 'flex';
+      bar.style.alignItems = 'flex-end';
+      const h = maxCount ? Math.round((counts[i] / maxCount) * 100) : 0;
+      const inner = document.createElement('div');
+      inner.title = String(counts[i]);
+      inner.style.width = '100%';
+      inner.style.borderRadius = '6px';
+      inner.style.background = 'var(--primary)';
+      inner.style.minHeight = '6px';
+      inner.style.height = Math.max(6, h) + '%';
+      bar.appendChild(inner);
+      histEl.appendChild(bar);
+    }
+    // legend ranges and x-axis labels (midpoints)
+    const ranges = [];
+    const labelsEl = document.getElementById('nrHistogramLabels');
+    const countsEl = document.getElementById('nrHistogramCounts');
+    if(labelsEl) { labelsEl.innerHTML = ''; labelsEl.style.borderTop = '1px solid rgba(255,255,255,0.04)'; labelsEl.style.paddingTop = '6px'; }
+    if(countsEl) { countsEl.innerHTML = ''; }
+    for(let i=0;i<bins;i++){
+      const a = min + (i * width / bins);
+      const b = min + ((i+1) * width / bins);
+      ranges.push(`${a.toFixed(4)} → ${b.toFixed(4)} (${counts[i]})`);
+      // label midpoint for x-axis
+      if(labelsEl){
+        const lbl = document.createElement('div');
+        lbl.style.flex = '1';
+        lbl.style.textAlign = 'center';
+        lbl.style.fontSize = '0.85rem';
+        lbl.style.color = 'var(--muted)';
+        const mid = (a + b) / 2;
+        lbl.textContent = mid.toFixed(4);
+        lbl.title = `${a.toFixed(6)} → ${b.toFixed(6)} (${counts[i]})`;
+        labelsEl.appendChild(lbl);
+      }
+      // render counts under each label so the "y-axis" (counts) appears at bottom
+      if(countsEl){
+        const c = document.createElement('div');
+        c.style.flex = '1';
+        c.style.textAlign = 'center';
+        c.style.fontSize = '0.82rem';
+        c.style.color = 'var(--muted)';
+        c.textContent = String(counts[i]);
+        countsEl.appendChild(c);
+      }
+    }
+    // hide the numeric ranges legend per user request
+    if(legend) legend.style.display = 'none';
+
+    // list raw values
+    listEl.innerHTML = '<div style="font-weight:700;margin-bottom:6px">Neighbor returns</div>' + vals.map((v,idx)=>`<div style="display:inline-block;margin-right:8px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03)">${v.toFixed(4)}</div>`).join('');
+  }
+}catch(e){ console.warn('next-return dist init failed', e); }
+</script>
+{% endif %}
+
+<script>
+try{
+  const defs = {
+    'Close': 'Last traded price at market close for the period — the primary price reference used for returns and indicators.',
+    'High': 'Highest traded price during the session — useful for range analysis and intraday volatility.',
+    'Low': 'Lowest traded price during the session — useful for support/range analysis.',
+    'Open': 'First traded price at session open — used to detect gap moves versus previous close.',
+    'Volume': 'Total traded shares in the period — liquidity measure used to confirm price moves and volume-weighted signals.',
+    'return': 'Arithmetic return for the period: (Close / previous Close − 1). Captures directional percent change.',
+    'log_return': 'Natural-log return: ln(Close / previous Close). Additive over time and preferable for some statistical models.',
+    'sma_5': '5-period simple moving average of Close — short-term trend baseline (price units).',
+    'ema_5': '5-period exponential moving average — short-term trend that weights recent closes more heavily than SMA.',
+    'sma_10': '10-period simple moving average — short-to-intermediate trend reference.',
+    'ema_10': '10-period exponential moving average — responds faster than SMA10 to recent price moves.',
+    'sma_20': '20-period simple moving average — commonly used for intermediate trend filtering.',
+    'ema_20': '20-period exponential moving average — intermediate trend indicator with recency bias.',
+    'vol_10': 'Rolling realized volatility: standard deviation of returns over 10 periods — a short-term risk/volatility proxy.',
+    'rsi_14': 'Relative Strength Index over 14 periods (0–100): momentum oscillator used for overbought/oversold context and divergence.',
+    'macd': 'MACD line (typically 12-EMA minus 26-EMA) — momentum/trend indicator in price units.',
+    'macd_signal': 'MACD signal line (usually a 9-EMA of MACD) — used for crossover signals and trend smoothing.',
+    'macd_hist': 'MACD histogram = MACD − signal — positive values indicate MACD above signal (rising bullish momentum).',
+    'lag_close_1': 'Close price one period prior — preserves raw lagged price information for temporal patterns.',
+    'lag_return_1': 'Return one period prior — recent return used to capture short-term momentum or mean-reversion.',
+    'lag_close_2': 'Close price two periods prior — additional temporal context.',
+    'lag_return_2': 'Return two periods prior — historical return signal at lag 2.',
+    'lag_close_3': 'Close price three periods prior — extended short-term context.',
+    'lag_return_3': 'Return three periods prior — captures slightly older momentum effects.',
+    'lag_close_5': 'Close price five periods prior — useful for weekly-style comparisons in daily data.',
+    'lag_return_5': 'Return five periods prior — longer short-term return used to capture recent trend persistence.'
+  };
+
+  const chips = Array.from(document.querySelectorAll('.feature-chip'));
+  const panel = document.getElementById('featureDetail');
+  const pName = document.getElementById('featureDetailName');
+  const pDef = document.getElementById('featureDetailDef');
+  const btnClose = document.getElementById('featureClose');
+  const btnCopy = document.getElementById('featureCopy');
+
+  chips.forEach(ch => ch.addEventListener('click', (e) => {
+    const feat = ch.getAttribute('data-feature') || ch.title || ch.textContent;
+    pName.textContent = feat;
+    pDef.textContent = defs[feat] || 'No definition available.';
+    panel.style.display = '';
+    panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }));
+
+  btnClose && btnClose.addEventListener('click', ()=>{ if(panel) panel.style.display='none'; });
+  btnCopy && btnCopy.addEventListener('click', ()=>{
+    const text = pName.textContent + ' — ' + pDef.textContent;
+    navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : null;
+    btnCopy.textContent = 'Copied';
+    setTimeout(()=> btnCopy.textContent = 'Copy', 1200);
+  });
+}catch(e){ console.warn('feature token init failed', e); }
+</script>
 {% endblock %}
+
+{% block scripts %}
+<script>
+// Fetch and render a small model summary (PCA) for the current ticker
+try{
+  const pageTicker = {{ (ticker or 'AAPL')|tojson }};
+  async function loadModelSummary(){
+    const el = document.getElementById('modelSummaryContent');
+    if(!el) return;
+    try{
+      const url = `/model-info?ticker=${encodeURIComponent(pageTicker)}`;
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if(!res.ok){ el.textContent = 'No model information available.'; return; }
+      // attempt to parse JSON, fallback to text
+      let data = null;
+      try{ data = await res.json(); }catch(e){ const txt = await res.text().catch(()=>null); console.warn('expected json, got:', txt); el.textContent = 'No model information available.'; return; }
+      const pca = data && data.pca ? data.pca : (data && data.pca_meta ? data.pca_meta : null);
+      if(!pca){ el.innerHTML = '<span class="muted">No PCA model found for this ticker.</span>'; return; }
+      // build an expanded summary with bars and key stats
+      const nComp = (pca.n_components || (pca.components && pca.components.length) || null);
+      const featCount = (pca.feature_order && pca.feature_order.length) || (pca.mean && pca.mean.length) || null;
+      const rowsCount = (pca.row_index && pca.row_index.length) || null;
+
+      const rows = [];
+      if(nComp !== null) rows.push({k: 'Components', v: nComp});
+      if(featCount !== null) rows.push({k: 'Feature dims', v: featCount});
+      if(rowsCount !== null) rows.push({k: 'Training rows', v: rowsCount});
+      if(pca.mean && pca.scale) rows.push({k: 'Scaler', v: '<span class="pill">mean + scale</span>'});
+      if(pca.created_at) rows.push({k: 'Generated', v: `<span class="ms-val">${pca.created_at}</span>`});
+
+      if(rows.length === 0){
+        el.innerHTML = '<div class="muted">PCA metadata present.</div>';
+      } else {
+        const grid = document.createElement('div');
+        grid.className = 'model-summary-grid';
+        rows.forEach(r => {
+          const key = document.createElement('div'); key.className = 'ms-key'; key.innerHTML = r.k;
+          const val = document.createElement('div'); val.className = 'ms-val'; val.innerHTML = r.v;
+          grid.appendChild(key);
+          grid.appendChild(val);
+        });
+        el.innerHTML = '';
+        el.appendChild(grid);
+      }
+    }catch(err){ console.warn('model summary fetch failed', err); if(document.getElementById('modelSummaryContent')) document.getElementById('modelSummaryContent').textContent = 'Failed to load model info'; }
+  }
+  loadModelSummary();
+}catch(e){ console.warn('init model summary failed', e); }
+</script>
+{% endblock %}
+
