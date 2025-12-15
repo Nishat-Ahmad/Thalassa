@@ -396,6 +396,27 @@ def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None)
         "confidence_interval": conf.values.tolist(),
         "ticker": ticker,
     }
+    # compute diagnostics (log-likelihood, rmse, mae) when possible
+    try:
+        log_likelihood = float(getattr(fitted, 'llf', None))
+    except Exception:
+        log_likelihood = None
+    try:
+        resid = np.asarray(getattr(fitted, 'resid', []))
+        resid = resid[~np.isnan(resid)]
+        if resid.size > 0:
+            rmse = float(np.sqrt(np.mean(resid ** 2)))
+            mae = float(np.mean(np.abs(resid)))
+        else:
+            rmse = None
+            mae = None
+    except Exception:
+        rmse = None
+        mae = None
+
+    out["log_likelihood"] = log_likelihood
+    out["rmse"] = rmse
+    out["mae"] = mae
     with open(os.path.join(target_dir, f"forecast_{ticker}.json"), "w") as f:
         json.dump(out, f)
     return {"status": "ok", "forecast": out}

@@ -54,22 +54,41 @@ def fit_arima(df: pd.DataFrame, horizon: int):
     return fitted, forecast, conf, idx, order, series
 
 
-def save_forecast(forecast, conf, idx, order, series, registry_dir: str, ticker: str):
+def save_forecast(fitted, forecast, conf, idx, order, series, registry_dir: str, ticker: str):
     os.makedirs(registry_dir, exist_ok=True)
+    # diagnostics
+    log_likelihood = None
+    rmse = None
+    mae = None
+    try:
+        log_likelihood = float(getattr(fitted, "llf", None))
+    except Exception:
+        log_likelihood = None
+    try:
+        resid = np.asarray(getattr(fitted, "resid", []))
+        resid = resid[~np.isnan(resid)]
+        if resid.size > 0:
+            rmse = float(np.sqrt(np.mean(resid ** 2)))
+            mae = float(np.mean(np.abs(resid)))
+    except Exception:
+        rmse = None
+        mae = None
+
     out = {
         "name": "arima-forecast",
         "created_at": datetime.now(UTC).isoformat(),
         "horizon": int(len(forecast)),
         "order": list(order),
-        "aic": float(getattr(forecast, 'aic', float('nan')))
-        if hasattr(forecast, 'aic') else float('nan'),
-        "bic": float(getattr(forecast, 'bic', float('nan')))
-        if hasattr(forecast, 'bic') else float('nan'),
+        "aic": float(getattr(fitted, 'aic', float('nan'))),
+        "bic": float(getattr(fitted, 'bic', float('nan'))),
         "last_observation": float(series.iloc[-1]),
         "predictions": [float(x) for x in forecast.tolist()],
         "dates": [d.isoformat() if not isinstance(d, (int, float)) else str(d) for d in idx],
         "confidence_interval": conf.values.tolist(),
         "ticker": ticker.upper(),
+        "log_likelihood": log_likelihood,
+        "rmse": rmse,
+        "mae": mae,
     }
     out_path = os.path.join(registry_dir, f"forecast_{ticker.upper()}.json")
     with open(out_path, "w") as f:
@@ -95,7 +114,7 @@ def main():
     df = load_series(args.features)
     ticker = os.path.splitext(os.path.basename(args.features))[0]
     fitted, forecast, conf, idx, order, series = fit_arima(df, args.horizon)
-    out_path = save_forecast(forecast, conf, idx, order, series, args.registry, ticker)
+    out_path = save_forecast(fitted, forecast, conf, idx, order, series, args.registry, ticker)
     print(json.dumps({"status": "ok", "forecast": out_path}, indent=2))
 
 

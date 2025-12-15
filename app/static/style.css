@@ -354,6 +354,89 @@ pre.detail-array, .detail-array {
   .grid { grid-template-columns: 1fr; }
 }
 
+/* Forecast page specific minimal styles */
+.forecast-root { display: grid; grid-template-columns: 1fr 420px; gap: 20px; align-items: start; margin-top: 10px; }
+.forecast-left, .forecast-right { }
+.forecast-card { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.04); padding:18px; border-radius:12px; }
+.forecast-card h3 { margin:0 0 8px 0; font-size:1.05rem; }
+.forecast-card h4 { margin:8px 0; font-size:0.95rem; }
+.forecast-card pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace; color:var(--muted-2); }
+
+@media (max-width: 920px) {
+  .forecast-root { grid-template-columns: 1fr; }
+}
+
+/* Forecast table styling */
+.forecast-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+.forecast-table thead th {
+  text-align: left;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.forecast-table td {
+  padding: 8px 10px;
+  border-bottom: 1px dashed rgba(255,255,255,0.02);
+  color: var(--text);
+}
+.forecast-table td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace; color:var(--muted-2); }
+.forecast-table tr:hover td { background: rgba(255,255,255,0.01); }
+
+/* Summary badge and details styling for forecast */
+.forecast-summary { display:inline-flex; gap:10px; align-items:center; font-weight:700; color:var(--text); }
+.forecast-badge { background: var(--primary); color: #052021; padding:4px 8px; border-radius:999px; font-size:0.85rem; font-weight:700; box-shadow: 0 6px 18px rgba(15,156,148,0.08); }
+details[open] > summary { outline: none; }
+summary.forecast-summary { cursor: default; }
+/* Slightly emphasize the details region */
+details { background: transparent; border-radius:8px; }
+
+/* Make summary look like a dropdown pill with caret */
+summary.forecast-summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.04);
+  background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+  transition: box-shadow 160ms ease, transform 120ms ease, border-color 120ms ease;
+}
+summary.forecast-summary:hover {
+  box-shadow: 0 8px 22px rgba(0,0,0,0.18);
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,0.07);
+}
+summary.forecast-summary::after {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  margin-left: 6px;
+  transition: transform 180ms ease, border-color 120ms ease;
+}
+details[open] > summary.forecast-summary::after {
+  transform: rotate(-135deg);
+  border-color: var(--primary-600);
+}
+summary.forecast-summary .forecast-badge { background: var(--primary); border: none; }
+
+/* Chart container */
+.forecast-chart { height: 220px; border-radius: 8px; overflow: hidden; }
+.forecast-chart canvas { width: 100% !important; height: 220px !important; display: block; }
+
+/* Chart card variant */
+.chart-card { padding: 18px; border-radius: 12px; }
+.chart-card h3 { margin: 0 0 8px 0; }
+
 /* Vertical stack variant: force each card to own full-width row */
 .cards-vertical {
   display: flex;

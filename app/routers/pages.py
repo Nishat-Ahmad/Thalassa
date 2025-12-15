@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, HTTPException, Form
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 import os, json, math, numpy as np, datetime, re
 import pandas as pd
 import yfinance as yf
@@ -639,8 +639,25 @@ def forecast_page(request: Request, ticker: str | None = None):
     )
 
 @router.post("/forecast-page", response_class=HTMLResponse)
-def forecast_page_submit(request: Request, horizon: int = Form(7), ticker: str | None = None):
-    t = _safe_ticker(ticker)
+async def forecast_page_submit(request: Request, horizon: int = Form(7), ticker: str | None = Form(None)):
+    # Prefer the explicit form field, then query param, then Referer; fallback handled by _safe_ticker
+    form = await request.form()
+    form_ticker = form.get("ticker") if form is not None else None
+    # try query param if form field missing
+    query_ticker = request.query_params.get("ticker")
+    # try Referer header query string as a last-ditch attempt
+    referer = request.headers.get("referer") or request.headers.get("referrer")
+    ref_ticker = None
+    try:
+        if referer and "?" in referer:
+            qs = referer.split("?", 1)[1]
+            for part in qs.split("&"):
+                if part.startswith("ticker="):
+                    ref_ticker = part.split("=", 1)[1]
+                    break
+    except Exception:
+        ref_ticker = None
+    t = _safe_ticker(form_ticker or ticker or query_ticker or ref_ticker)
     error = None
     result = None
     if ARIMA is None:
@@ -684,24 +701,67 @@ def forecast_page_submit(request: Request, horizon: int = Form(7), ticker: str |
                 error = f"Forecast error: {e}"
     persisted = None
     FORECAST_META_PATH = forecast_path(t)
-    if os.path.exists(FORECAST_META_PATH):
+    # If we computed a new result successfully, persist it so the GET page
+    # (which we redirect to) will display the newly generated forecast.
+    if result is not None and error is None:
+        # compute training diagnostics (log-likelihood, RMSE, MAE) from the fitted model
+        log_likelihood = None
+        rmse = None
+        mae = None
         try:
-            with open(FORECAST_META_PATH, "r") as f:
-                persisted = json.load(f)
+            if 'fitted' in locals() and hasattr(fitted, 'llf'):
+                log_likelihood = float(getattr(fitted, 'llf', None))
         except Exception:
-            pass
-    return templates.TemplateResponse(
-        "forecast.html",
-        {
-            "request": request,
-            "title": "Forecast",
-            "year": datetime.datetime.now().year,
-            "forecast": persisted,
-            "computed": result,
-            "error": error,
+            log_likelihood = None
+        try:
+            if 'fitted' in locals() and hasattr(fitted, 'resid'):
+                resid = np.asarray(getattr(fitted, 'resid'))
+                resid = resid[~np.isnan(resid)]
+                if resid.size > 0:
+                    rmse = float(np.sqrt(np.mean(resid ** 2)))
+                    mae = float(np.mean(np.abs(resid)))
+        except Exception:
+            rmse = None
+            mae = None
+
+        out = {
+            "name": "arima-forecast",
+            "created_at": datetime.datetime.now().isoformat(),
+            "horizon": int(result.get("horizon", 0)),
+            "order": result.get("order", []),
+            "aic": float(result.get("aic", float("nan"))),
+            "bic": float(result.get("bic", float("nan"))),
+            "last_observation": float(result.get("last_observation", float("nan"))),
+            "predictions": result.get("predictions", []),
+            "dates": result.get("dates", []),
+            "confidence_interval": result.get("confidence_interval", []),
             "ticker": t,
-        },
-    )
+            "log_likelihood": log_likelihood,
+            "rmse": rmse,
+            "mae": mae,
+        }
+        try:
+            # ensure parent dir exists where forecast_path points
+            parent = os.path.dirname(FORECAST_META_PATH)
+            if parent and not os.path.exists(parent):
+                os.makedirs(parent, exist_ok=True)
+            with open(FORECAST_META_PATH, "w") as f:
+                json.dump(out, f, indent=2)
+            persisted = out
+        except Exception:
+            # persistence failure should not block redirect; fall through
+            persisted = None
+    else:
+        if os.path.exists(FORECAST_META_PATH):
+            try:
+                with open(FORECAST_META_PATH, "r") as f:
+                    persisted = json.load(f)
+            except Exception:
+                persisted = None
+
+    # Redirect back to the GET page including the ticker query param so
+    # the browser URL reflects the selected ticker (e.g. ?ticker=MSFT).
+    return RedirectResponse(url=f"/forecast-page?ticker={t}", status_code=303)
 
 @router.get("/recommend-page", response_class=HTMLResponse)
 def recommend_page(request: Request, ticker: str | None = None):

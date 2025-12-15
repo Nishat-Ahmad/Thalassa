@@ -1,69 +1,343 @@
 {% extends 'base.html' %}
 {% block content %}
 <section class="section-header">
-  <h1>ARIMA Forecast</h1>
-  <p class="muted">View persisted forecast from pipeline and generate on-demand forecasts for a chosen horizon.</p>
-  <div class="toolbar">
-    <a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">← Back to ML Tasks</a>
-    <span class="muted">Ticker: <strong>{{ ticker or 'AAPL' }}</strong></span>
+  <div class="container" style="display:flex;align-items:center;gap:12px;justify-content:space-between;padding:6px 0 18px;">
+    <div>
+      <h1 style="margin:0;font-size:1.6rem">ARIMA Forecast</h1>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">← Back</a>
+      <span class="muted">Ticker: <strong>{{ ticker or 'AAPL' }}</strong></span>
+    </div>
   </div>
-  {% if error %}<p class="alert">{{ error }}</p>{% endif %}
+  {% if error %}<p class="alert" style="margin:8px 0 0">{{ error }}</p>{% endif %}
 </section>
 
-<div class="grid">
-  <div class="panel">
-    <h3>Persisted Forecast (Pipeline)</h3>
-    {% if forecast %}
-      <p><strong>Created:</strong> {{ forecast.created_at }}</p>
-      <p><strong>Horizon:</strong> {{ forecast.horizon }} days</p>
-      <p><strong>Order:</strong> {{ forecast.order }}</p>
-      <p><strong>AIC:</strong> {{ '%.2f'|format(forecast.aic) }} | <strong>BIC:</strong> {{ '%.2f'|format(forecast.bic) }}</p>
-      <p><strong>Last Close:</strong> {{ '%.2f'|format(forecast.last_observation) }}</p>
-      <details>
-        <summary>Predictions ({{ forecast.predictions|length }})</summary>
-        <code style="display:block;white-space:pre-wrap">{{ forecast.predictions|map('float')|map('round',2)|list|join(', ') }}</code>
-      </details>
-      <details>
-        <summary>Confidence Intervals</summary>
-        <code style="display:block;white-space:pre-wrap">{{ forecast.confidence_interval }}</code>
-      </details>
-      <div style="margin-top:8px">
-        <a class="btn btn-outline" href="/forecast{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Open JSON</a>
-      </div>
-    {% else %}
-      <p class="muted">No persisted forecast yet. Run the pipeline to generate one.</p>
-    {% endif %}
+<div class="forecast-root container">
+  <div class="forecast-left">
+    <div class="forecast-card">
+      <h3 style="margin-top:0">Persisted Forecast</h3>
+      {% if forecast %}
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div><strong>Created:</strong> {{ forecast.created_at }}</div>
+          <div><strong>Horizon:</strong> {{ forecast.horizon }} days</div>
+          <div><strong>Order:</strong> {{ forecast.order }}</div>
+          <div><strong>AIC / BIC:</strong> {{ '%.2f'|format(forecast.aic) }} / {{ '%.2f'|format(forecast.bic) }}</div>
+          <div><strong>Last Close:</strong> {{ '%.2f'|format(forecast.last_observation) }}</div>
+          {% if forecast.log_likelihood is defined and forecast.log_likelihood is not none %}
+            <div><strong>Log-likelihood:</strong> {{ '%.2f'|format(forecast.log_likelihood) }}</div>
+          {% elif forecast.llf is defined and forecast.llf is not none %}
+            <div><strong>Log-likelihood:</strong> {{ '%.2f'|format(forecast.llf) }}</div>
+          {% else %}
+            <div><strong>Log-likelihood:</strong> <span class="muted">N/A</span></div>
+          {% endif %}
+
+          {% if forecast.metrics is defined %}
+            {% if forecast.metrics.rmse is defined and forecast.metrics.rmse is not none %}
+              <div><strong>Train RMSE:</strong> {{ '%.4f'|format(forecast.metrics.rmse) }}</div>
+            {% elif forecast.rmse is defined and forecast.rmse is not none %}
+              <div><strong>Train RMSE:</strong> {{ '%.4f'|format(forecast.rmse) }}</div>
+            {% else %}
+              <div><strong>Train RMSE:</strong> <span class="muted">N/A</span></div>
+            {% endif %}
+            {% if forecast.metrics.mae is defined and forecast.metrics.mae is not none %}
+              <div><strong>Train MAE:</strong> {{ '%.4f'|format(forecast.metrics.mae) }}</div>
+            {% elif forecast.mae is defined and forecast.mae is not none %}
+              <div><strong>Train MAE:</strong> {{ '%.4f'|format(forecast.mae) }}</div>
+            {% else %}
+              <div><strong>Train MAE:</strong> <span class="muted">N/A</span></div>
+            {% endif %}
+          {% else %}
+            {% if forecast.rmse is defined and forecast.rmse is not none %}
+              <div><strong>Train RMSE:</strong> {{ '%.4f'|format(forecast.rmse) }}</div>
+            {% else %}
+              <div><strong>Train RMSE:</strong> <span class="muted">N/A</span></div>
+            {% endif %}
+            {% if forecast.mae is defined and forecast.mae is not none %}
+              <div><strong>Train MAE:</strong> {{ '%.4f'|format(forecast.mae) }}</div>
+            {% else %}
+              <div><strong>Train MAE:</strong> <span class="muted">N/A</span></div>
+            {% endif %}
+          {% endif %}
+          <div style="margin-top:12px">
+            <a class="btn btn-outline" href="/forecast{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Open JSON</a>
+          </div>
+        </div>
+      {% else %}
+        <div class="muted">No persisted forecast found. Run the pipeline or compute below.</div>
+      {% endif %}
+    </div>
   </div>
-  <div class="panel">
-    <h3>Generate New Forecast</h3>
-    <form action="/forecast-page" method="post" class="form">
-      <input type="hidden" name="ticker" value="{{ ticker or '' }}" />
-      <div class="form-control">
-        <label for="horizon">Horizon (days)</label>
-        <input id="horizon" type="number" name="horizon" value="7" min="1" max="30" required />
-        <small class="hint">ARIMA(1,1,1) quick forecast; pipeline uses same order.</small>
-      </div>
-      <div class="form-actions">
-        <button class="btn btn-primary" type="submit">Forecast</button>
-      </div>
-    </form>
-    {% if computed %}
-      <section style="margin-top:12px">
-        <h4>On-Demand Result</h4>
-        <p><strong>Horizon:</strong> {{ computed.horizon }}</p>
-        <p><strong>Order:</strong> {{ computed.order }}</p>
-        <p><strong>AIC:</strong> {{ '%.2f'|format(computed.aic) }} | <strong>BIC:</strong> {{ '%.2f'|format(computed.bic) }}</p>
-        <p><strong>Last Close:</strong> {{ '%.2f'|format(computed.last_observation) }}</p>
-        <details>
-          <summary>Predictions</summary>
-          <code style="display:block;white-space:pre-wrap">{{ computed.predictions|map('float')|map('round',2)|list|join(', ') }}</code>
-        </details>
-        <details>
-          <summary>Confidence Intervals</summary>
-          <code style="display:block;white-space:pre-wrap">{{ computed.confidence_interval }}</code>
-        </details>
-      </section>
-    {% endif %}
+
+  <div class="forecast-right">
+    <div class="forecast-card">
+      <h3 style="margin-top:0">Generate New Forecast</h3>
+      <form action="/forecast-page" method="post" class="form" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="hidden" name="ticker" value="{{ ticker or '' }}" />
+        <label style="display:flex;gap:8px;align-items:center">
+          <span class="muted">Horizon</span>
+          <input id="horizon" type="number" name="horizon" value="7" min="1" max="30" required style="width:92px" />
+        </label>
+        <div style="margin-left:auto">
+          <button class="btn btn-primary" type="submit">Forecast</button>
+        </div>
+      </form>
+
+      
+
+      {% if forecast %}
+        <div style="margin-top:14px">
+          <details>
+            <summary class="forecast-summary">
+              <span>Forecast</span>
+              <span class="forecast-badge">{{ (forecast.horizon if forecast.horizon is defined else (forecast.predictions|length)) }}d</span>
+            </summary>
+            <div style="overflow:auto;margin-top:8px;">
+              <table class="forecast-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Prediction</th>
+                    <th>Lower</th>
+                    <th>Upper</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for pred in forecast.predictions %}
+                    {% set i = loop.index0 %}
+                    <tr>
+                      <td>{{ (forecast.dates[i] if forecast.dates is defined and forecast.dates else (loop.index)) }}</td>
+                      <td class="mono">{{ '%.2f'|format(pred) }}</td>
+                      <td class="mono">{{ '%.2f'|format(forecast.confidence_interval[i][0]) }}</td>
+                      <td class="mono">{{ '%.2f'|format(forecast.confidence_interval[i][1]) }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </div>
+      {% endif %}
+
+      {% if computed %}
+        <div style="margin-top:14px">
+          <h4 style="margin:0 0 8px 0">On-Demand Result</h4>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+            <div><strong>Horizon</strong><div class="muted">{{ computed.horizon }}</div></div>
+            <div><strong>Order</strong><div class="muted">{{ computed.order }}</div></div>
+            <div><strong>AIC</strong><div class="muted">{{ '%.2f'|format(computed.aic) }}</div></div>
+            <div><strong>BIC</strong><div class="muted">{{ '%.2f'|format(computed.bic) }}</div></div>
+          </div>
+          <details style="margin-top:8px">
+            <summary class="forecast-summary">
+              <span>Forecast</span>
+              <span class="forecast-badge">{{ (computed.horizon if computed.horizon is defined else (computed.predictions|length)) }}d</span>
+            </summary>
+            <div style="overflow:auto;margin-top:8px;">
+              <table class="forecast-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Prediction</th>
+                    <th>Lower</th>
+                    <th>Upper</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for pred in computed.predictions %}
+                    {% set i = loop.index0 %}
+                    <tr>
+                      <td>{{ (computed.dates[i] if computed.dates is defined and computed.dates else (loop.index)) }}</td>
+                      <td class="mono">{{ '%.2f'|format(pred) }}</td>
+                      <td class="mono">{{ '%.2f'|format(computed.confidence_interval[i][0]) }}</td>
+                      <td class="mono">{{ '%.2f'|format(computed.confidence_interval[i][1]) }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </div>
+      {% endif %}
+    </div>
   </div>
 </div>
+
+<div class="container">
+  <div class="forecast-card chart-card" style="margin-top:12px">
+    <h3 style="margin-top:0">Forecast Chart</h3>
+    <div class="forecast-chart" style="margin-top:8px">
+      <canvas id="forecastChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="container" style="margin-top:16px">
+  <div class="forecast-card" style="padding:16px">
+    <h3 style="margin:0 0 8px 0">Forecast Glossary</h3>
+    <div class="glossary-list" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+      <div class="glossary-entry">
+        <button class="glossary-toggle" aria-expanded="false"><span>Order (p, d, q)</span><span class="caret">▸</span></button>
+        <div class="glossary-body">ARIMA order: p = AR lags, d = number of differences to make the series stationary, q = MA lags. For example, [1,1,1] uses one autoregressive lag, one difference, and one moving-average lag.</div>
+      </div>
+      <div class="glossary-entry">
+        <button class="glossary-toggle" aria-expanded="false"><span>AIC / BIC</span><span class="caret">▸</span></button>
+        <div class="glossary-body">Information criteria that balance model fit and complexity. Lower is better. AIC is more flexible; BIC penalizes extra parameters more strongly.</div>
+      </div>
+      <div class="glossary-entry">
+        <button class="glossary-toggle" aria-expanded="false"><span>Last Close</span><span class="caret">▸</span></button>
+        <div class="glossary-body">The most recent observed closing price used as the starting point for the forecast horizon.</div>
+      </div>
+      <div class="glossary-entry">
+        <button class="glossary-toggle" aria-expanded="false"><span>Log-likelihood</span><span class="caret">▸</span></button>
+        <div class="glossary-body">The log probability of the observed data under the fitted model. Higher (less negative) indicates a better fit when comparing models of the same data.</div>
+      </div>
+      <div class="glossary-entry">
+        <button class="glossary-toggle" aria-expanded="false"><span>Train RMSE</span><span class="caret">▸</span></button>
+        <div class="glossary-body">Root Mean Squared Error of in-sample residuals: $\sqrt{\frac{1}{n}\sum (\hat{y}-y)^2}$. Sensitive to larger errors.</div>
+      </div>
+      <div class="glossary-entry">
+        <button class="glossary-toggle" aria-expanded="false"><span>Train MAE</span><span class="caret">▸</span></button>
+        <div class="glossary-body">Mean Absolute Error of in-sample residuals: $\frac{1}{n}\sum |\hat{y}-y|$. Less sensitive to outliers than RMSE.</div>
+      </div>
+      <div class="glossary-entry">
+        <button class="glossary-toggle" aria-expanded="false"><span>Confidence Interval</span><span class="caret">▸</span></button>
+        <div class="glossary-body">For each forecast step, the model’s lower/upper bounds (typically 95%) that reflect uncertainty around the point forecast.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Chart.js (CDN) + inline chart rendering for forecast predictions -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  (function(){
+    try {
+      const persistedDates = {{ forecast.dates|tojson if forecast else '[]' }};
+      const persistedPred = {{ forecast.predictions|tojson if forecast else '[]' }};
+      const computedDates = {{ computed.dates|tojson if computed else '[]' }};
+      const computedPred = {{ computed.predictions|tojson if computed else '[]' }};
+
+      const canvas = document.getElementById('forecastChart');
+      if (!canvas) return;
+
+      // Prefer persisted dates as labels, otherwise computed dates
+      const labels = (persistedDates && persistedDates.length) ? persistedDates : computedDates;
+
+      const datasets = [];
+      if (persistedPred && persistedPred.length) {
+        // add CI shading (upper then lower with fill to previous) and then prediction line
+        const persistedConf = {{ forecast.confidence_interval|tojson if forecast else '[]' }};
+        const pUpper = (persistedConf && persistedConf.length) ? persistedConf.map(c => c[1]) : [];
+        const pLower = (persistedConf && persistedConf.length) ? persistedConf.map(c => c[0]) : [];
+        if (pUpper.length === persistedPred.length && pLower.length === persistedPred.length) {
+          datasets.push({
+            label: 'Persisted CI (upper)',
+            data: pUpper,
+            borderColor: 'transparent',
+            pointRadius: 0,
+            borderWidth: 0,
+            fill: false,
+          });
+          datasets.push({
+            label: 'Persisted CI (lower)',
+            data: pLower,
+            borderColor: 'transparent',
+            pointRadius: 0,
+            borderWidth: 0,
+            fill: '-1',
+            backgroundColor: 'rgba(25,211,197,0.08)'
+          });
+        }
+        datasets.push({
+          label: 'Persisted',
+          data: persistedPred,
+          borderColor: getComputedStyle(document.documentElement).getPropertyValue('--primary') || '#19d3c5',
+          backgroundColor: 'rgba(25,211,197,0.00)',
+          tension: 0.25,
+          pointRadius: 3,
+          spanGaps: true,
+          order: 3
+        });
+      }
+      if (computedPred && computedPred.length) {
+        // computed CI
+        const computedConf = {{ computed.confidence_interval|tojson if computed else '[]' }};
+        const cUpper = (computedConf && computedConf.length) ? computedConf.map(c => c[1]) : [];
+        const cLower = (computedConf && computedConf.length) ? computedConf.map(c => c[0]) : [];
+        if (cUpper.length === computedPred.length && cLower.length === computedPred.length) {
+          datasets.push({
+            label: 'Computed CI (upper)',
+            data: cUpper,
+            borderColor: 'transparent',
+            pointRadius: 0,
+            borderWidth: 0,
+            fill: false,
+          });
+          datasets.push({
+            label: 'Computed CI (lower)',
+            data: cLower,
+            borderColor: 'transparent',
+            pointRadius: 0,
+            borderWidth: 0,
+            fill: '-1',
+            backgroundColor: 'rgba(255,184,107,0.06)'
+          });
+        }
+        datasets.push({
+          label: 'On-Demand',
+          data: computedPred,
+          borderColor: '#ffb86b',
+          backgroundColor: 'rgba(255,184,107,0.00)',
+          tension: 0.25,
+          borderDash: [6,4],
+          pointRadius: 3,
+          spanGaps: true,
+          order: 4
+        });
+      }
+
+      if (!datasets.length) {
+        // nothing to draw
+        canvas.style.display = 'none';
+        return;
+      }
+
+      // ensure canvas has a height
+      canvas.style.height = '220px';
+
+      new Chart(canvas, {
+        type: 'line',
+        data: { labels: labels, datasets: datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { position: 'top' } },
+          scales: {
+            x: { display: true, ticks: { maxRotation: 0, autoSkip: true } },
+            y: { display: true, beginAtZero: false }
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('Forecast chart error', e);
+    }
+  })();
+</script>
+<script>
+  (function(){
+    try {
+      const toggles = Array.from(document.querySelectorAll('.glossary-toggle'));
+      toggles.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const entry = btn.closest('.glossary-entry');
+          if (!entry) return;
+          const expanded = entry.classList.toggle('expanded');
+          btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+      });
+    } catch(e) { /* no-op */ }
+  })();
+</script>
 {% endblock %}
