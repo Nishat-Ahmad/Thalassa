@@ -8,10 +8,12 @@ from ..core import (
     MODEL_REGISTRY,
     xgb_classifier_paths,
     pca_paths,
+    xgb_paths,
     cluster_paths,
     forecast_path,
     association_path,
 )
+from ..services.models import load_xgb, align_to_booster_features
 
 try:
     from statsmodels.tsa.arima.model import ARIMA
@@ -229,7 +231,175 @@ def contact_page(request: Request):
 
 @router.get("/upload", response_class=HTMLResponse)
 def upload_page(request: Request):
-    return templates.TemplateResponse("upload.html", {"request": request, "title": "Upload", "year": datetime.datetime.now().year})
+    # Show the upload page and, if a ticker is provided or a registry entry exists,
+    # predict for the most recent week of ingested features and render results.
+    t = _safe_ticker(request.query_params.get("ticker"))
+    ts = request.query_params.get("ts")
+    # Try loading model and features; if unavailable, render page without predictions
+    try:
+        booster, feat_names = load_xgb(t)
+    except Exception:
+        booster, feat_names = None, None
+
+    # attempt to load model metadata for summary card
+    model_meta = None
+    try:
+        model_path, model_meta_path = xgb_paths(t)
+        if os.path.exists(model_meta_path):
+            with open(model_meta_path, 'r') as mf:
+                model_meta = json.load(mf)
+    except Exception:
+        model_meta = None
+    # attempt to load model metadata for summary card
+    model_meta = None
+    try:
+        model_path, model_meta_path = xgb_paths(t)
+        if os.path.exists(model_meta_path):
+            with open(model_meta_path, 'r') as mf:
+                model_meta = json.load(mf)
+    except Exception:
+        model_meta = None
+
+    if booster is None or not feat_names:
+        return templates.TemplateResponse("upload.html", {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "ticker": t, "ts": ts, "model_meta": model_meta})
+
+    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    if not os.path.exists(feat_path):
+        return templates.TemplateResponse("upload.html", {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "ticker": t, "ts": ts, "model_meta": model_meta})
+
+    try:
+        df = pd.read_parquet(feat_path).reset_index(drop=True)
+    except Exception:
+        return templates.TemplateResponse("upload.html", {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "ticker": t, "ts": ts, "model_meta": model_meta})
+
+    # try sorting by date if present and take latest 7 rows
+    try:
+        if "date" in df.columns:
+            df = df.copy()
+            df["date"] = pd.to_datetime(df["date"], errors="coerce")
+            df = df.sort_values("date").reset_index(drop=True)
+        latest_df = df.tail(7).reset_index(drop=True)
+    except Exception:
+        latest_df = df.tail(7).reset_index(drop=True)
+
+    try:
+        df_aligned = align_to_booster_features(latest_df, feat_names)
+    except Exception:
+        return templates.TemplateResponse("upload.html", {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "ticker": t, "ts": ts, "model_meta": model_meta})
+
+    try:
+        dmat = xgb.DMatrix(df_aligned)
+        preds = booster.predict(dmat)
+    except Exception:
+        return templates.TemplateResponse("upload.html", {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "ticker": t, "ts": ts, "model_meta": model_meta})
+
+    dates = None
+    if "date" in latest_df.columns:
+        try:
+            dates = pd.to_datetime(latest_df["date"]).dt.strftime("%Y-%m-%d").tolist()
+        except Exception:
+            dates = latest_df["date"].astype(str).tolist()
+
+    return templates.TemplateResponse(
+        "upload.html",
+        {
+            "request": request,
+            "title": "Upload",
+            "year": datetime.datetime.now().year,
+            "predictions": [float(x) for x in preds.tolist()],
+            "count": int(len(preds)),
+            "dates": dates,
+            "ticker": t,
+            "ts": ts,
+            "model_meta": model_meta,
+        },
+    )
+
+
+@router.post("/upload", response_class=HTMLResponse)
+def upload_predict(request: Request, ticker: str | None = Form("AAPL"), ts: str | None = Form(None)):
+    t = _safe_ticker(ticker)
+    # load regressor and feature names
+    try:
+        booster, feat_names = load_xgb(t)
+    except Exception:
+        booster, feat_names = None, None
+
+    # ensure model_meta is defined for template rendering
+    model_meta = None
+    try:
+        model_path, model_meta_path = xgb_paths(t)
+        if os.path.exists(model_meta_path):
+            with open(model_meta_path, 'r') as mf:
+                model_meta = json.load(mf)
+    except Exception:
+        model_meta = None
+
+    if booster is None or not feat_names:
+        return templates.TemplateResponse(
+            "upload.html",
+            {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "error": "XGB model not available. Train it first.", "ticker": t, "ts": ts, "model_meta": model_meta},
+        )
+
+    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    if not os.path.exists(feat_path):
+        return templates.TemplateResponse(
+            "upload.html",
+            {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "error": f"Features file missing for {t}. Run the pipeline first.", "ticker": t, "ts": ts, "model_meta": model_meta},
+        )
+
+    try:
+        df = pd.read_parquet(feat_path).reset_index(drop=True)
+    except Exception:
+        return templates.TemplateResponse(
+            "upload.html",
+            {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "error": "Could not read feature parquet for ticker.", "ticker": t, "ts": ts, "model_meta": model_meta},
+        )
+
+    try:
+        df_aligned = align_to_booster_features(df, feat_names)
+    except HTTPException as e:
+        return templates.TemplateResponse(
+            "upload.html",
+            {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "error": e.detail, "ticker": t, "ts": ts, "model_meta": model_meta},
+        )
+    except Exception:
+        return templates.TemplateResponse(
+            "upload.html",
+            {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "error": "Failed to align features for prediction.", "ticker": t, "ts": ts, "model_meta": model_meta},
+        )
+
+    try:
+        dmat = xgb.DMatrix(df_aligned)
+        preds = booster.predict(dmat)
+    except Exception as e:
+        return templates.TemplateResponse(
+            "upload.html",
+            {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "error": f"Prediction failed: {e}", "ticker": t, "ts": ts, "model_meta": model_meta},
+        )
+
+    # prepare date column if present for display
+    dates = None
+    if "date" in df.columns:
+        try:
+            dates = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d").tolist()
+        except Exception:
+            dates = df["date"].astype(str).tolist()
+
+    return templates.TemplateResponse(
+        "upload.html",
+        {
+            "request": request,
+            "title": "Upload",
+            "year": datetime.datetime.now().year,
+            "predictions": [float(x) for x in preds.tolist()],
+            "count": int(len(preds)),
+            "dates": dates,
+            "ticker": t,
+            "ts": ts,
+            "model_meta": model_meta,
+        },
+    )
 
 @router.get("/classify", response_class=HTMLResponse)
 def classify_page(request: Request, ticker: str | None = None):

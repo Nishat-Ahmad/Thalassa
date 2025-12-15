@@ -925,24 +925,37 @@ def predict_class(req: PredictRequest, ticker: str = Query("AAPL")):
     label = int(proba >= 0.5)
     return {"model": "xgb_classifier", "proba_up": proba, "label": label}
 
-@router.post("/upload")
+@router.post("/upload-csv")
 async def upload_csv(file: UploadFile = File(...)):
     content = await file.read()
     size_kb = round(len(content) / 1024, 2)
     return {"status": "ok", "size_kb": size_kb}
 
 @router.post("/predict-batch")
-async def predict_batch(file: UploadFile = File(...), ticker: str = Query("AAPL")):
-    booster, feat_names = load_xgb(_safe_ticker(ticker))
+async def predict_batch(ticker: str = Form("AAPL")):
+    # Predict using the pipeline-ingested features for the given ticker
+    t = _safe_ticker(ticker)
+    booster, feat_names = load_xgb(t)
     if booster is None or not feat_names:
         raise HTTPException(status_code=400, detail="XGB model not available. Train it first.")
+
+    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    if not os.path.exists(feat_path):
+        raise HTTPException(status_code=404, detail=f"Feature file missing for {t}. Run the pipeline first.")
     try:
-        df = pd.read_csv(file.file)
+        df = pd.read_parquet(feat_path)
     except Exception:
-        content = await file.read()
-        from io import BytesIO
-        df = pd.read_csv(BytesIO(content))
-    df_aligned = align_to_booster_features(df, feat_names)
+        raise HTTPException(status_code=500, detail="Could not read feature parquet for ticker")
+
+    # Keep only numeric columns for alignment; align_to_booster_features will validate required columns
+    try:
+        df_aligned = align_to_booster_features(df, feat_names)
+    except HTTPException as e:
+        # propagate missing-features error
+        raise e
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to align features for prediction")
+
     dmatrix = xgb.DMatrix(df_aligned)
     preds = booster.predict(dmatrix)
     return {"count": int(len(preds)), "predictions": preds.tolist()}

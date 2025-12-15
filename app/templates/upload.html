@@ -1,21 +1,189 @@
 {% extends 'base.html' %}
 {% block content %}
 <section class="section-header">
-  <h1>Batch Prediction</h1>
-  <p class="muted">Upload a CSV with the model's expected features to receive predictions.</p>
-  <div class="toolbar"><a class="btn" href="/tasks">← Back to ML Tasks</a></div>
+  <h1>Regression</h1>
+  <div class="toolbar"><a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% if ts %}&ran=1&ts={{ ts }}{% endif %}{% endif %}">← Back to ML Tasks</a></div>
 </section>
 
-<form action="/predict-batch" method="post" enctype="multipart/form-data" class="form">
-  <div class="form-control">
-    <label for="file">CSV File</label>
-    <input id="file" type="file" name="file" accept=".csv" required />
-    <small class="hint">Tip: See <a href="/model-info">/model-info</a> for expected columns.</small>
+<!-- Horizontal layout: model summary first, then form (single-line side-by-side) -->
+<div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:nowrap;margin-top:12px;">
+  {% if model_meta is defined and model_meta %}
+  <div style="width:360px;min-width:260px;">
+    <div class="panel" style="padding:12px;">
+      <h3 style="margin-top:0;margin-bottom:8px;">Model Summary</h3>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <div><strong>Name:</strong> {{ model_meta.name if model_meta.name else 'XGBoost Regressor' }}</div>
+        <div><strong>Ticker:</strong> {{ model_meta.ticker if model_meta.ticker else ticker }}</div>
+        <div><strong>Created:</strong> {{ model_meta.created_at if model_meta.created_at else '-' }}</div>
+        <div><strong>Features:</strong> {{ (model_meta.features|length) if model_meta.features is defined else 'N/A' }}</div>
+        {% if model_meta.metrics is defined %}
+          <div><strong>RMSE:</strong> {% if model_meta.metrics.rmse is defined %}{{ '%.5f'|format(model_meta.metrics.rmse) }}{% else %}-{% endif %}</div>
+          <div><strong>MAE:</strong> {% if model_meta.metrics.mae is defined %}{{ '%.5f'|format(model_meta.metrics.mae) }}{% else %}-{% endif %}</div>
+        {% endif %}
+      </div>
+      <p class="muted" style="margin-top:8px;">This model predicts the next-day fractional return (decimal).</p>
+    </div>
   </div>
-  <div class="form-actions">
-    <button class="btn btn-primary" type="submit">Upload & Predict</button>
-    <a class="btn btn-outline" href="/tasks">Back to ML Tasks</a>
-  </div>
-</form>
+  {% endif %}
 
+  <div style="flex:1;min-width:260px;max-width:820px;">
+    <div class="panel" style="padding:12px;">
+      <form action="/upload" method="post" class="form" style="margin:0;">
+        <div class="form-control">
+          <label for="ticker">Ticker</label>
+          <input id="ticker" type="text" name="ticker" placeholder="AAPL" required />
+          <small class="hint">Predict using the features ingested by the pipeline for this ticker.</small>
+        </div>
+        <input type="hidden" name="ts" value="{{ ts or '' }}" />
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Predict for Random Ticker</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% if predictions is defined and predictions is not none %}
+<section class="section-header">
+  <h2>Predictions for {{ ticker }}</h2>
+</section>
+
+<div>
+  <button id="predToggle" class="btn btn-outline" aria-expanded="false">Show Predictions ({{ count }})</button>
+
+  <div id="predPanel" style="display:none;margin-top:12px;">
+    <div class="table-responsive">
+      <table class="table">
+        <thead><tr><th>#</th>{% if dates %}<th>Date</th>{% endif %}<th>Prediction (%)</th></tr></thead>
+        <tbody>
+        {% for p in predictions %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            {% if dates %}<td>{{ dates[loop.index0] }}</td>{% endif %}
+            <td>{{ '%.5f'|format(p * 100) }}%</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Chart: Predictions over dates (always visible) -->
+<div style="margin-top:18px;">
+  <canvas id="predChart" height="450"></canvas>
+</div>
+{% endif %}
+
+<!-- glossary moved here to bottom of page -->
+<div class="panel" style="margin-top:18px;">
+  <h3>How to read these predictions</h3>
+  <div class="glossary-list" style="margin-top:8px">
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Value (Percent)</span><span class="caret">▸</span></button>
+      <div class="glossary-body">Each prediction is shown as a percent. Example: <code>0.10000%</code> represents a 0.1% expected change.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Predicted Next-Close</span><span class="caret">▸</span></button>
+      <div class="glossary-body">Compute <code>next_close = Close × (1 + prediction/100)</code> using the <strong>Close</strong> value from the same row in the features file (prediction is percent).</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Sign & Interpretation</span><span class="caret">▸</span></button>
+      <div class="glossary-body">Positive → expected increase; negative → expected decrease. Magnitude is the expected percent change.</div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+  (function(){
+    try{
+      const toggles = Array.from(document.querySelectorAll('.glossary-toggle'));
+      toggles.forEach(btn => {
+        btn.addEventListener('click', ()=>{
+          const entry = btn.closest('.glossary-entry');
+          if(!entry) return;
+          const expanded = entry.classList.toggle('expanded');
+          btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+      });
+    }catch(e){/* ignore */}
+  })();
+</script>
+<!-- Chart.js and rendering for predictions (deferred until panel open) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  (function(){
+    try{
+      const toggle = document.getElementById('predToggle');
+      const panel = document.getElementById('predPanel');
+      let predChartInstance = null;
+
+      function buildLabels(){
+        return [
+          {% if dates %}
+            {% for d in dates %}'{{ d }}'{% if not loop.last %}, {% endif %}{% endfor %}
+          {% else %}
+            {% for p in predictions %}{{ loop.index }}{% if not loop.last %}, {% endif %}{% endfor %}
+          {% endif %}
+        ];
+      }
+      function buildData(){
+        return [
+          {% for p in predictions %}{{ (p * 100) | round(5, 'common') }}{% if not loop.last %}, {% endif %}{% endfor %}
+        ];
+      }
+
+      function createChart(){
+        const el = document.getElementById('predChart');
+        if(!el) return null;
+        const labels = buildLabels();
+        const data = buildData();
+        const ctx = el.getContext('2d');
+        const cfg = new Chart(ctx, {
+          type: 'line',
+          data: { labels: labels, datasets: [{ label: 'Prediction (%)', data: data, borderColor: 'rgba(33,150,243,1)', backgroundColor: 'rgba(33,150,243,0.08)', tension: 0.25, pointRadius: 4, pointHoverRadius: 6, fill: true }] },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { ticks: { callback: function(value){ return Number(value).toFixed(3) + '%'; } } } },
+            plugins: { tooltip: { callbacks: { label: function(ctx){ return ctx.dataset.label + ': ' + Number(ctx.parsed.y).toFixed(3) + '%'; } } } }
+          }
+        });
+        return cfg;
+      }
+
+        // create chart immediately (chart is outside the collapsible panel)
+        try{
+          if(document.getElementById('predChart') && !predChartInstance){
+            predChartInstance = createChart();
+          }
+        }catch(e){}
+
+      if(toggle && panel){
+        toggle.addEventListener('click', function(){
+          const expanded = toggle.getAttribute('aria-expanded') === 'true';
+          if(expanded){
+            panel.style.display = 'none';
+            toggle.setAttribute('aria-expanded', 'false');
+            toggle.textContent = `Show Predictions ({{ count }})`;
+          } else {
+            panel.style.display = '';
+            toggle.setAttribute('aria-expanded', 'true');
+            toggle.textContent = `Hide Predictions ({{ count }})`;
+            // create chart lazily
+            if(!predChartInstance){
+              predChartInstance = createChart();
+            } else if(typeof predChartInstance.resize === 'function'){
+              try{ predChartInstance.resize(); }catch(e){}
+            }
+          }
+        });
+      }
+    }catch(e){console.error('Prediction panel script error', e)}
+  })();
+</script>
 {% endblock %}

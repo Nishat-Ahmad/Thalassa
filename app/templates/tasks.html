@@ -52,11 +52,11 @@
   </article>
   <article class="card task-card">
     <div class="card-head">
-      <span class="pill">Data</span>
-      <h3>Batch Predict</h3>
+      <span class="pill">Next Day Return</span>
+      <h3>Regression</h3>
     </div>
-    <p>Upload a CSV with feature columns to generate bulk predictions in one pass.</p>
-    <div class="form-actions"><a class="btn btn-primary" href="/upload">Open</a></div>
+    <p>Predict next‑day returns for a selected ticker using the pipeline‑ingested feature dataset. The regression page computes predictions (by default for the latest week of data).</p>
+    <div class="form-actions"><a class="btn btn-primary" href="/upload{% if ticker %}?ticker={{ ticker }}{% if ts %}&ts={{ ts }}{% endif %}{% endif %}">Open</a></div>
   </article>
   <article class="card task-card">
     <div class="card-head">
