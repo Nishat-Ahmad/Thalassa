@@ -94,6 +94,12 @@ def engineer(data_path: str):
         df[f"lag_close_{lag}"] = close.shift(lag)
         df[f"lag_return_{lag}"] = df["return"].shift(lag)
     df.dropna(inplace=True)
+    # remove the ticker column from the persisted feature file to avoid
+    # producing trivial `ticker=...` items in downstream association mining
+    try:
+        df = df.drop(columns=["ticker"])
+    except Exception:
+        pass
     fpath = os.path.join(FEATURE_DIR, os.path.basename(data_path))
     df.to_parquet(fpath)
     return fpath
@@ -164,9 +170,9 @@ def train_classification(feature_path: str, run_dir: str | None = None):
 def train_association_rules(
     feature_path: str,
     run_dir: str | None = None,
-    min_support: float = 0.1,
-    min_confidence: float = 0.6,
-    max_rules: int = 100,
+    min_support: float = 0.05,
+    min_confidence: float = 0.5,
+    max_rules: int = 200,
 ):
     ticker = _ticker_from_path(feature_path)
     script = os.path.join(os.path.dirname(__file__), "..", "ml", "train_association.py")

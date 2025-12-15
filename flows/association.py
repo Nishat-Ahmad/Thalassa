@@ -26,6 +26,9 @@ def _build_itemset_frame(df: pd.DataFrame) -> pd.DataFrame:
         items["VOL_HIGH"] = (df["Volume"] >= vol_thr).astype(int)
     # Any categorical columns already present (encode each category as item)
     for c in cols:
+        # skip ticker/symbol columns to avoid trivial ticker=... items
+        if str(c).lower() in ("ticker", "symbol"):
+            continue
         if df[c].dtype == "object":
             for val in df[c].dropna().unique()[:50]:
                 items[f"{c}={val}"] = (df[c] == val).astype(int)
@@ -36,7 +39,7 @@ def _build_itemset_frame(df: pd.DataFrame) -> pd.DataFrame:
     return item_df.clip(0, 1).astype(bool)
 
 
-def compute_association_rules(ticker: str = "AAPL", min_support: float = 0.1, min_confidence: float = 0.6, max_rules: int = 100):
+def compute_association_rules(ticker: str = "AAPL", min_support: float = 0.05, min_confidence: float = 0.5, max_rules: int = 200):
     feat_path = os.path.join(FEATURES_DIR, f"{ticker}.parquet")
     if not os.path.exists(feat_path):
         raise FileNotFoundError(f"Features file missing: {feat_path}")
@@ -48,19 +51,29 @@ def compute_association_rules(ticker: str = "AAPL", min_support: float = 0.1, mi
         result = {"ticker": ticker, "min_support": min_support, "min_confidence": min_confidence, "rules": []}
     else:
         rules = association_rules(freq, metric="confidence", min_threshold=min_confidence)
-        rules = rules.sort_values(["lift", "confidence", "support"], ascending=False)
-        # serialize top rules
+        # prefer rules with higher confidence, then lift, then support
+        rules = rules.sort_values(["confidence", "lift", "support"], ascending=False)
+        # deduplicate symmetric rules coming from the same frequent itemset
+        seen_itemsets = set()
         serialized = []
-        for _, r in rules.head(max_rules).iterrows():
+        for _, r in rules.iterrows():
+            ant = frozenset(r["antecedents"]) if r.get("antecedents") is not None else frozenset()
+            cons = frozenset(r["consequents"]) if r.get("consequents") is not None else frozenset()
+            full = frozenset(list(ant) + list(cons))
+            if not full or full in seen_itemsets:
+                continue
+            seen_itemsets.add(full)
             serialized.append({
-                "antecedents": sorted(list(r["antecedents"])),
-                "consequents": sorted(list(r["consequents"])),
+                "antecedents": sorted(list(ant)),
+                "consequents": sorted(list(cons)),
                 "support": float(r["support"]),
                 "confidence": float(r.get("confidence", np.nan)),
                 "lift": float(r.get("lift", np.nan)),
                 "leverage": float(r.get("leverage", np.nan)),
                 "conviction": float(r.get("conviction", np.nan)),
             })
+            if len(serialized) >= max_rules:
+                break
         result = {
             "ticker": ticker,
             "min_support": min_support,

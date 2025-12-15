@@ -58,18 +58,29 @@ def train_association(df: pd.DataFrame, min_support: float, min_confidence: floa
             "n_rules": 0,
         }
     rules = association_rules(freq, metric="confidence", min_threshold=min_confidence)
-    rules = rules.sort_values(["lift", "confidence", "support"], ascending=False)
+    # sort by confidence first (user preference), then lift and support
+    rules = rules.sort_values(["confidence", "lift", "support"], ascending=False)
+    # deduplicate symmetric rules (keep single direction per combined itemset)
+    seen_itemsets = set()
     serialized = []
-    for _, r in rules.head(max_rules).iterrows():
+    for _, r in rules.iterrows():
+        ant = frozenset(r["antecedents"]) if r.get("antecedents") is not None else frozenset()
+        cons = frozenset(r["consequents"]) if r.get("consequents") is not None else frozenset()
+        full = frozenset(list(ant) + list(cons))
+        if not full or full in seen_itemsets:
+            continue
+        seen_itemsets.add(full)
         serialized.append({
-            "antecedents": sorted(list(r["antecedents"])),
-            "consequents": sorted(list(r["consequents"])),
+            "antecedents": sorted(list(ant)),
+            "consequents": sorted(list(cons)),
             "support": float(r["support"]),
             "confidence": float(r.get("confidence", np.nan)),
             "lift": float(r.get("lift", np.nan)),
             "leverage": float(r.get("leverage", np.nan)),
             "conviction": float(r.get("conviction", np.nan)),
         })
+        if len(serialized) >= max_rules:
+            break
     return {
         "min_support": min_support,
         "min_confidence": min_confidence,
@@ -90,8 +101,8 @@ def main():
         default=os.path.join(os.path.dirname(__file__), "registry"),
         help="Output registry directory",
     )
-    parser.add_argument("--min-support", type=float, default=0.1, help="Minimum support for itemsets")
-    parser.add_argument("--min-confidence", type=float, default=0.6, help="Minimum confidence for rules")
+    parser.add_argument("--min-support", type=float, default=0.05, help="Minimum support for itemsets")
+    parser.add_argument("--min-confidence", type=float, default=0.5, help="Minimum confidence for rules")
     parser.add_argument("--max-rules", type=int, default=100, help="Max rules to keep")
     args = parser.parse_args()
 

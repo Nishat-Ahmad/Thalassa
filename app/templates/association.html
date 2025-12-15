@@ -1,42 +1,288 @@
 {% extends "base.html" %}
 {% block content %}
-<section>
-  <h1>Association Rules</h1>
-  <div class="toolbar">
-    <a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">← Back to ML Tasks</a>
-    <span class="muted">Ticker: <strong>{{ ticker or assoc.ticker or 'AAPL' }}</strong></span>
+<section class="container">
+  <div class="hero" style="padding:18px;">
+    <div class="hero-content">
+      <h1 class="hero-title">Association Rules</h1>
+      <p class="hero-subtitle">Interpretable co-occurrence rules derived from recent features for <strong>{{ ticker or assoc.ticker or 'AAPL' }}</strong>.</p>
+      {# header badges removed per user request - metrics displayed below in the Provenance panel #}
+    </div>
+    <div class="hero-right">
+      <a class="btn" href="/tasks{% if ticker %}?ticker={{ ticker }}{% endif %}">← Back</a>
+      {% if error %}
+        <div class="panel" style="background:transparent;border:0;padding:0;margin-top:8px;color:var(--muted);">{{ error }}</div>
+      {% endif %}
+    </div>
   </div>
-  {% if error %}
-    <p class="error">{{ error }}</p>
-  {% endif %}
+
+    <div class="panel" style="margin-top:12px; display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:220px">
+        <h3 style="margin:0 0 6px 0">Metrics & Provenance</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div class="badge">Rules: {{ assoc.n_rules if assoc else '—' }}</div>
+          <div class="badge">Min support: {{ '%.3f'|format(assoc.min_support) if assoc else '—' }}</div>
+          <div class="badge">Min confidence: {{ '%.3f'|format(assoc.min_confidence) if assoc else '—' }}</div>
+        </div>
+      </div>
+      <div style="min-width:220px">
+        <div class="muted">Last run: <strong>{{ assoc_meta.last_run if assoc_meta.last_run else '—' }}</strong></div>
+        <div class="muted" style="margin-top:6px">Feature columns: <strong>{{ assoc_meta.feature_count if assoc_meta.feature_count is not none else '—' }}</strong></div>
+        <div style="margin-top:8px">
+          <details>
+            <summary class="muted">Show feature list{% if assoc_meta.feature_list %} (first {{ assoc_meta.feature_list|length }}){% endif %}</summary>
+            <div style="margin-top:8px; display:flex;flex-wrap:wrap;gap:6px">
+              {% if assoc_meta.feature_list and assoc_meta.feature_list|length > 0 %}
+                {% for f in assoc_meta.feature_list %}
+                  <span class="feature-chip" title="{{ f }}">{{ f }}</span>
+                {% endfor %}
+              {% else %}
+                <div class="muted">Feature list unavailable. Run the pipeline to generate features for this ticker.</div>
+              {% endif %}
+            </div>
+          </details>
+        </div>
+      </div>
+      <div style="margin-left:auto"> 
+        <a class="btn btn-outline" href="{{ assoc_meta.rules_path }}" target="_blank">Open raw JSON</a>
+      </div>
+    </div>
+
   {% if assoc %}
-    <p>Ticker: <strong>{{ assoc.ticker }}</strong></p>
-    <p>Min Support: {{ assoc.min_support }}, Min Confidence: {{ assoc.min_confidence }}</p>
-    <p>Total Rules: {{ assoc.n_rules }}</p>
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Antecedents</th>
-          <th>Consequents</th>
-          <th>Support</th>
-          <th>Confidence</th>
-          <th>Lift</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in assoc.rules %}
-        <tr>
-          <td>{{ ", ".join(r.antecedents) }}</td>
-          <td>{{ ", ".join(r.consequents) }}</td>
-          <td>{{ '%.3f'|format(r.support) }}</td>
-          <td>{{ '%.3f'|format(r.confidence) }}</td>
-          <td>{{ '%.3f'|format(r.lift) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="panel" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <div class="muted">Ticker: <strong>{{ assoc.ticker }}</strong></div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th class="col-name">Antecedents</th>
+              <th class="col-name">Consequents</th>
+              <th class="numeric">Support</th>
+              <th class="numeric">Confidence</th>
+              <th class="numeric">Lift</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in assoc.rules %}
+            <tr data-idx="{{ loop.index0 }}" data-support="{{ '%.6f'|format(r.support) }}" data-confidence="{{ '%.6f'|format(r.confidence) }}" data-lift="{{ '%.6f'|format(r.lift) }}">
+              <td class="col-name"><div>{{ ", ".join(r.antecedents) }}</div></td>
+              <td class="col-name"><div>{{ ", ".join(r.consequents) }}</div></td>
+              <td class="numeric">{{ '%.3f'|format(r.support) }}</td>
+              <td class="numeric"><span class="badge" style="background:transparent;border-color:rgba(255,255,255,0.04);">{{ '%.3f'|format(r.confidence) }}</span></td>
+              <td class="numeric"><span class="badge">{{ '%.3f'|format(r.lift) }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div id="assocViz" style="margin-top:12px; display:flex;flex-direction:column;gap:12px;">
+        <div class="card" style="width:100%">
+          <h3>Support vs Confidence</h3>
+          <div id="supportScatter" style="width:100%;height:320px;background:#0f1724;border-radius:8px;padding:8px"></div>
+        </div>
+        <div class="card" style="width:100%">
+          <h3>Co-occurrence Heatmap</h3>
+          <div id="cooccurrenceHeatmap" style="width:100%;height:320px;background:#0f1724;border-radius:8px;padding:8px"></div>
+        </div>
+        {# Rule Graph removed per user request #}
+      </div>
+    </div>
   {% else %}
-    <p>No rules available.</p>
+    <div class="panel">
+      <p class="muted">No association rules available. Run the pipeline to generate rules for this ticker.</p>
+    </div>
   {% endif %}
+  {# panel shown always; assoc_meta fields may be empty if artifacts are missing #}
 </section>
+{# Glossary for association rules and feature tokens #}
+<div class="panel" style="margin-top:18px;">
+  <h3>Association Glossary</h3>
+  <div class="glossary-list" style="margin-top:8px">
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Antecedents</span><span class="caret">▸</span></button>
+      <div class="glossary-body">The item(s) on the left side of a rule (the "if" part). Example: if <strong>PRICE_ABOVE_SMA10</strong> appears in the antecedent, the rule is describing what often follows when that condition is true.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Consequents</span><span class="caret">▸</span></button>
+      <div class="glossary-body">The item(s) on the right side of a rule (the "then" part). A rule reads: when the antecedent happens, the consequent often happens too.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Support</span><span class="caret">▸</span></button>
+      <div class="glossary-body">How often the combined items (antecedent + consequent) appear together in the dataset. It is a proportion between 0 and 1. Higher support means the pattern is common.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Confidence</span><span class="caret">▸</span></button>
+      <div class="glossary-body">Given the antecedent happened, the probability that the consequent also happened. It ranges from 0 to 1. For example, confidence 0.8 means "80% of the time the antecedent occurs, the consequent also occurs." Higher is stronger.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>Lift</span><span class="caret">▸</span></button>
+      <div class="glossary-body">Measures how much more often the antecedent and consequent occur together than you would expect if they were independent. A lift &gt; 1 means they co-occur more than random chance (interesting); ≈1 means no association; &lt;1 means they appear together less than expected.</div>
+    </div>
+
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>PRICE_ABOVE_SMA10</span><span class="caret">▸</span></button>
+      <div class="glossary-body">A binary feature that is true when the last price is above the 10-period simple moving average. It signals recent upward momentum relative to that short-term average.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>PRICE_BELOW_SMA10</span><span class="caret">▸</span></button>
+      <div class="glossary-body">True when the last price is below the 10-period SMA. It indicates recent weakness versus the short-term average.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>VOL_HIGH</span><span class="caret">▸</span></button>
+      <div class="glossary-body">A flag meaning trading volume is high relative to its recent history (e.g., above a percentile). High volume often accompanies stronger price moves and confirms interest.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>VOL_LOW</span><span class="caret">▸</span></button>
+      <div class="glossary-body">The opposite of <strong>VOL_HIGH</strong>: volume is low compared to recent values, suggesting quieter trading and smaller moves.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>RET_UP</span><span class="caret">▸</span></button>
+      <div class="glossary-body">Indicates the return over the chosen lookback period was positive (the price went up). It is a simple way to state direction over that horizon.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>RET_DOWN</span><span class="caret">▸</span></button>
+      <div class="glossary-body">Indicates the return over the lookback period was negative (the price went down).</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>RSI_HIGH / RSI_LOW</span><span class="caret">▸</span></button>
+      <div class="glossary-body">Simple oscillator-based flags: <strong>RSI_HIGH</strong> means the RSI is above a high threshold (e.g., 70), suggesting overbought conditions; <strong>RSI_LOW</strong> means RSI is below a low threshold (e.g., 30), suggesting oversold.</div>
+    </div>
+    <div class="glossary-entry">
+      <button class="glossary-toggle" aria-expanded="false"><span>How to use these terms</span><span class="caret">▸</span></button>
+      <div class="glossary-body">Rules are descriptive: they tell you which binary features tend to appear together in historical data. They are not guarantees or trading advice. Use support/confidence/lift to judge how common and how meaningful a rule is.</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+  (function(){
+    try{
+      const toggles = Array.from(document.querySelectorAll('.glossary-toggle'));
+      toggles.forEach(btn => {
+        btn.addEventListener('click', ()=>{
+          const entry = btn.closest('.glossary-entry');
+          if(!entry) return;
+          const expanded = entry.classList.toggle('expanded');
+          btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+      });
+    }catch(e){/* ignore */}
+  })();
+</script>
+<script>
+  (function(){
+    // fetch association JSON and render visualizations
+    async function loadPlotly(){
+      if(window.Plotly) return;
+      return new Promise((res, rej)=>{
+        const s = document.createElement('script'); s.src = 'https://cdn.plot.ly/plotly-2.24.1.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s);
+      });
+    }
+
+    async function fetchAssoc(){
+      try{
+        const t = encodeURIComponent("{{ ticker }}" || "{{ assoc.ticker if assoc else '' }}");
+        const res = await fetch(`/association-info?ticker=${t}`);
+        if(!res.ok) return null;
+        return await res.json();
+      }catch(e){ return null; }
+    }
+
+    function renderScatter(rules, meta){
+      const xs = rules.map(r => r.support);
+      const ys = rules.map(r => r.confidence);
+      const labels = rules.map(r => `${r.antecedents.join(', ')} → ${r.consequents.join(', ')}`);
+      const lifts = rules.map(r => r.lift || 0);
+      const maxSupport = Math.max(...xs, 0.001);
+      const markerSizes = xs.map(s => 8 + Math.round((s / maxSupport) * 16));
+      const trace = { x: xs, y: ys, text: labels, mode: 'markers', marker: {size: markerSizes, color: lifts, colorscale:'Viridis', colorbar:{title:'Lift'} }, hovertemplate:'%{text}<br>Support: %{x:.3f}<br>Confidence: %{y:.3f}<extra></extra>' };
+      const shapes = [];
+      try{
+        if(meta && meta.min_support!=null){
+          shapes.push({ type:'line', x0: meta.min_support, x1: meta.min_support, xref:'x', y0:0, y1:1, yref:'paper', line:{dash:'dash', color:'rgba(255,255,255,0.12)'} });
+        }
+        if(meta && meta.min_confidence!=null){
+          shapes.push({ type:'line', y0: meta.min_confidence, y1: meta.min_confidence, yref:'y', x0:0, x1:1, xref:'paper', line:{dash:'dash', color:'rgba(255,255,255,0.12)'} });
+        }
+      }catch(e){/* ignore */}
+      const layout = { template:'plotly_dark', margin:{t:20,l:50,r:10,b:70}, xaxis:{title:{text:'Support', standoff:12}, automargin:true}, yaxis:{title:'Confidence'}, shapes: shapes, plot_bgcolor:'rgba(0,0,0,0)', paper_bgcolor:'rgba(0,0,0,0)', font:{color:'#ffffff'} };
+      Plotly.newPlot('supportScatter', [trace], layout, {responsive:true,displayModeBar:false}).then(()=>{
+        const sp = document.getElementById('supportScatter');
+        sp.on('plotly_click', function(data){
+          try{
+            const pt = data.points[0];
+            const idx = pt.pointIndex;
+            highlightTableRows([idx]);
+          }catch(e){/* ignore */}
+        });
+      });
+    }
+
+    function renderHeatmap(rules){
+      // build co-occurrence matrix of items
+      const items = new Set();
+      rules.forEach(r => { (r.antecedents||[]).forEach(i=>items.add(i)); (r.consequents||[]).forEach(i=>items.add(i)); });
+      const itemList = Array.from(items);
+      if(!itemList.length){ document.getElementById('cooccurrenceHeatmap').innerHTML = '<div class="muted">No items to show.</div>'; return; }
+      const idx = Object.fromEntries(itemList.map((v,i)=>[v,i]));
+      const mat = Array.from({length:itemList.length},()=>Array(itemList.length).fill(0));
+      rules.forEach(r => {
+        const all = (r.antecedents||[]).concat(r.consequents||[]);
+        for(let i=0;i<all.length;i++) for(let j=0;j<all.length;j++){ if(i===j) continue; mat[idx[all[i]]][idx[all[j]]] += 1; }
+      });
+      const z = mat.map(row => row.map(v=>v));
+      const trace = { z:z, x:itemList, y:itemList, type:'heatmap', colorscale:'YlGnBu', hovertemplate:'%{x} & %{y}: %{z}<extra></extra>' };
+      const layout = { template:'plotly_dark', margin:{t:20,l:200,r:10,b:120}, xaxis:{tickangle:-45, automargin:true}, yaxis:{autorange:'reversed', automargin:true}, colorbar:{title:'Count'}, plot_bgcolor:'rgba(0,0,0,0)', paper_bgcolor:'rgba(0,0,0,0)', font:{color:'#ffffff'} };
+      Plotly.newPlot('cooccurrenceHeatmap', [trace], layout, {responsive:true,displayModeBar:false}).then(()=>{
+        const hm = document.getElementById('cooccurrenceHeatmap');
+        hm.on('plotly_click', function(data){
+          try{
+            const p = data.points[0];
+            const a = p.x; const b = p.y;
+            // find rules that include both a and b
+            const matched = [];
+            rules.forEach((r, i)=>{
+              const items = (r.antecedents||[]).concat(r.consequents||[]);
+              if(items.indexOf(a) !== -1 && items.indexOf(b) !== -1){ matched.push(i); }
+            });
+            highlightTableRows(matched);
+          }catch(e){/* ignore */}
+        });
+      });
+    }
+
+    // highlight table rows by index array
+    function highlightTableRows(indices){
+      // clear prior
+      document.querySelectorAll('tr.rule-highlight').forEach(r=> r.classList.remove('rule-highlight'));
+      if(!indices || !indices.length) return;
+      indices.forEach(i => {
+        const row = document.querySelector(`tr[data-idx=\"${i}\"]`);
+        if(row){ row.classList.add('rule-highlight'); row.scrollIntoView({behavior:'smooth', block:'center'}); }
+      });
+    }
+
+    // Rule graph removed per user request; no-op placeholder
+    function renderRuleGraph(rules){ return; }
+
+    (async ()=>{
+      try{
+        const assoc = await fetchAssoc();
+        if(!assoc || !assoc.rules) return;
+        await loadPlotly();
+        const rules = assoc.rules.map(r=>({antecedents:r.antecedents||[], consequents:r.consequents||[], support:+r.support||0, confidence:+r.confidence||0, lift:+r.lift||0}));
+        renderScatter(rules);
+        renderHeatmap(rules);
+      }catch(e){ console.warn('assoc viz failed', e); }
+    })();
+  })();
+</script>
 {% endblock %}

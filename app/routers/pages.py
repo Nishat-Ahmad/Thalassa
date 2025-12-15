@@ -833,7 +833,38 @@ def association_page(request: Request, ticker: str | None = None):
             error = f"Failed to load association rules: {e}"
     else:
         error = "No association rules found. Run the association flow to generate them."
+    # gather provenance/metrics to show in UI
+    assoc_meta = {}
+    try:
+        if os.path.exists(path):
+            mtime = os.path.getmtime(path)
+            assoc_meta["last_run"] = datetime.datetime.fromtimestamp(mtime).isoformat()
+            assoc_meta["rules_path"] = f"/association-info?ticker={t}"
+        # try to inspect features file for feature count and list
+        feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+        if os.path.exists(feat_path):
+            try:
+                df_feats = pd.read_parquet(feat_path)
+                assoc_meta["feature_count"] = int(len(df_feats.columns))
+                assoc_meta["feature_list"] = list(map(str, df_feats.columns[:50]))
+            except Exception:
+                assoc_meta["feature_count"] = None
+                assoc_meta["feature_list"] = []
+    except Exception:
+        assoc_meta = {}
+
     return templates.TemplateResponse(
         "association.html",
-        {"request": request, "title": "Association", "year": datetime.datetime.now().year, "assoc": data, "error": error, "ticker": t},
+        {
+            "request": request,
+            "title": "Association",
+            "year": datetime.datetime.now().year,
+            "assoc": data,
+            "assoc_meta": assoc_meta,
+            "error": error,
+            "ticker": t,
+        },
     )
+
+
+# Selection persistence removed — association page is read-only
