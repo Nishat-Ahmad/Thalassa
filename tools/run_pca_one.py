@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-import os, json, sys, datetime
+import datetime
+import importlib.util
+import json
+import sys
 from pathlib import Path
+
+import numpy as np
+
 ROOT = Path(__file__).resolve().parents[1]
 spec_path = ROOT / 'ml' / 'train_pca.py'
-import importlib.util
 spec = importlib.util.spec_from_file_location('train_pca', str(spec_path))
 train_pca = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(train_pca)
@@ -23,7 +28,6 @@ meta_path = out_dir / f'pca_{ticker}.json'
 comps_path = out_dir / f'pca_transformed_{ticker}.npy'
 with open(meta_path,'w') as f:
     json.dump(meta,f,indent=2)
-import numpy as np
 np.save(comps_path, comps)
 print('Saved to', out_dir)
 print('Explained variance ratio:')

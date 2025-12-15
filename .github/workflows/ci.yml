@@ -48,18 +48,31 @@ jobs:
           if [ -d ml/registry/AAPL ]; then
             latest=$(ls -1d ml/registry/AAPL/*/ 2>/dev/null | sort | tail -n1 || true)
             if [ -n "$latest" ]; then
-              cp "${latest}"xgb_model_AAPL.json ml/registry/ 2>/dev/null || true
-              cp "${latest}"xgb_classifier_AAPL.json ml/registry/ 2>/dev/null || true
+              for f in xgb_model_AAPL.json xgb_classifier_AAPL.json; do
+                src_file="${latest}${f}"
+                if [ -s "$src_file" ]; then
+                  cp "$src_file" ml/registry/
+                else
+                  echo "Skipping empty or missing $src_file"
+                fi
+              done
             fi
           fi
-          # Ensure feature file exists in ml/features
-          if [ -f ml/features/AAPL.parquet ]; then
-            echo "features present"
+          # Ensure feature file exists and is non-empty in ml/features; prefer any found feature copy,
+          # otherwise fallback to ml/data AAPL parquet
+          if [ -s ml/features/AAPL.parquet ]; then
+            echo "features present and non-empty"
           else
-            src=$(find ml -type f -name 'AAPL.parquet' | head -n1 || true)
+            # prefer any AAPL.parquet elsewhere under ml/ (excluding ml/features)
+            src=$(find ml -type f -name 'AAPL.parquet' ! -path '*/ml/features/*' | head -n1 || true)
             if [ -n "$src" ]; then
               mkdir -p ml/features
-              cp "$src" ml/features/AAPL.parquet || true
+              cp "$src" ml/features/AAPL.parquet
+            elif [ -s ml/data/AAPL.parquet ]; then
+              mkdir -p ml/features
+              cp ml/data/AAPL.parquet ml/features/AAPL.parquet
+            else
+              echo "No feature source found; tests may fail without ml/features/AAPL.parquet"
             fi
           fi
       - name: Unit & ML tests
@@ -86,9 +99,59 @@ jobs:
           name: ml-registry
           path: ml/registry
 
-  build-push-image:
+  deepchecks:
     runs-on: ubuntu-latest
     needs: train-pipeline
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run DeepChecks runner (capture exit code)
+        run: |
+          set +e
+          python ml/deepchecks/run_deepchecks.py --features ml/features/AAPL.parquet --registry ml/registry --ticker AAPL --fail-on-severe
+          ec=$?
+          set -e
+          echo $ec > deepchecks_exit_code.txt
+      - name: Upload DeepChecks report
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepchecks-report
+          path: ml/registry/deepchecks
+      - name: Upload DeepChecks exit code
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepchecks-exit-code
+          path: deepchecks_exit_code.txt
+      - name: Fail on severe drift
+        run: |
+          ec=$(cat deepchecks_exit_code.txt || echo 0)
+          if [ "$ec" -ne 0 ]; then
+            echo "DeepChecks runner signalled failure (exit $ec). Failing job."
+            exit $ec
+          fi
+      - name: "Note: raw-price drift expected (no gating)"
+        run: |
+          echo "Raw price features naturally drift over long horizons; this run only produces a report and does not block the pipeline."
+      - name: Run DeepChecks (raw, report only)
+        run: |
+          # Run raw feature drift checks but do not fail the job on severe drift;
+          # raw price scale changes are expected over long historical windows.
+          python ml/deepchecks/run_deepchecks.py --features ml/features/AAPL.parquet --registry ml/registry --ticker AAPL --feature-mode raw --window 90 --metric ks --pvalue-threshold 0.001 || true
+      - name: Upload Raw DeepChecks report
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepchecks-report-raw
+          path: ml/registry/deepchecks
+
+  build-push-image:
+    runs-on: ubuntu-latest
+    needs: deepchecks
     permissions:
       contents: read
       packages: write

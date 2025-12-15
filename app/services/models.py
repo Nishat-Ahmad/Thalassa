@@ -1,5 +1,6 @@
-import os, json
-import numpy as np
+import json
+import os
+
 import pandas as pd
 from fastapi import HTTPException
 from ..core import xgb_paths, xgb_classifier_paths

@@ -1,6 +1,12 @@
 from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
-import os, json, math, numpy as np, datetime, re
+import datetime
+import json
+import math
+import os
+import re
+
+import numpy as np
 import pandas as pd
 import yfinance as yf
 from ..core import (

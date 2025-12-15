@@ -1,5 +1,9 @@
 from prefect import task
-import os, pandas as pd, numpy as np, json
+import json
+import os
+
+import numpy as np
+import pandas as pd
 import warnings
 import logging
 import yfinance as yf

@@ -2,15 +2,17 @@
 """Apply primary PCA fixes for BAC: log1p Volume, drop constant cols, StandardScaler, PCA(n_components=5).
 Saves pca_BAC.json and pca_transformed_BAC.npy into a new timestamped registry folder.
 """
-import json, os, datetime
+import datetime
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
 
 try:
     from sklearn.preprocessing import StandardScaler
     from sklearn.decomposition import PCA
-except Exception as e:
+except Exception:
     print("Missing sklearn. Install with: pip install scikit-learn")
     raise
 
@@ -70,7 +72,7 @@ out_dir = REGISTRY_BASE / ts
 out_dir.mkdir(parents=True, exist_ok=True)
 
 # Save transformed array
-trans_path = out_dir / f'pca_transformed_BAC.npy'
+trans_path = out_dir / 'pca_transformed_BAC.npy'
 np.save(trans_path, Xp)
 print('Saved transformed array to', trans_path)
 

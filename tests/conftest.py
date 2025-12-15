@@ -1,17 +1,10 @@
 import json
-import os
-import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
-
-# Ensure repo root is on sys.path so imports like `app` resolve during tests
-repo_root = Path(__file__).resolve().parents[1]
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 from app.main import app
 
@@ -42,13 +35,10 @@ def setup_ml_artifacts():
                 dst.write(src.read())
             # read into df for metadata creation
             df = pd.read_parquet(repo_feat)
-            wrote_parquet = True
         except Exception:
             df = None
-            wrote_parquet = False
     else:
         df = None
-        wrote_parquet = False
 
     # Create a small synthetic features dataframe if none available from repo
     if df is None:
@@ -70,16 +60,14 @@ def setup_ml_artifacts():
         if not (cwd_features / "AAPL.parquet").exists():
             with open(feat_path, "rb") as src, open(cwd_features / "AAPL.parquet", "wb") as dst:
                 dst.write(src.read())
-        wrote_parquet = True
     except Exception:
         # fallback to CSV
         try:
             csv_path = features_dir / "AAPL.csv"
             df.to_csv(csv_path, index=False)
             df.to_csv(cwd_features / "AAPL.csv", index=False)
-            wrote_parquet = False
         except Exception:
-            wrote_parquet = False
+            pass
 
     # Minimal registry metadata to satisfy tests
     meta = {"metrics": {"rmse": 0.1}, "features": [str(c) for c in df.select_dtypes(include=[np.number]).columns]}

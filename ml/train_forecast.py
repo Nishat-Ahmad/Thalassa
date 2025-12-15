@@ -18,7 +18,7 @@ except Exception as e:  # pragma: no cover - missing dependency
     raise SystemExit("statsmodels is required for forecasting. Install statsmodels.") from e
 
 
-def load_series(path: str) -> pd.Series:
+def load_series(path: str) -> pd.DataFrame:
     if not os.path.exists(path):
         raise FileNotFoundError(f"Feature file not found: {path}")
     if path.endswith(".parquet"):
@@ -31,26 +31,32 @@ def load_series(path: str) -> pd.Series:
 
 
 def fit_arima(df: pd.DataFrame, horizon: int):
-    series = df["Close"].astype(float)
-        df = df.copy()
-        if "date" in df.columns:
-            df["date"] = pd.to_datetime(df["date"], errors="coerce")
-            df = df.dropna(subset=["date"]).sort_values("date")
-            series = df.set_index("date")["Close"].astype(float)
-            freq = pd.infer_freq(series.index)
-            if freq is None:
-                freq = "D"
-            series = series.asfreq(freq).ffill()
-        else:
-            series = df["Close"].astype(float)
+    df = df.copy()
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        df = df.dropna(subset=["date"]).sort_values("date")
+        series = df.set_index("date")["Close"].astype(float)
+        try:
+            freq = pd.infer_freq(series.index) if len(series.index) >= 3 else None
+        except Exception:
+            freq = None
+        if freq is None:
+            freq = "D"
+        series = series.asfreq(freq).ffill()
+    else:
+        series = df["Close"].astype(float)
     order = (1, 1, 1)
     model = ARIMA(series, order=order)
     fitted = model.fit()
     forecast = fitted.forecast(steps=horizon)
     conf_res = fitted.get_forecast(steps=horizon)
     conf = conf_res.conf_int()
-    last_date = pd.to_datetime(df["date"].iloc[-1]) if "date" in df.columns else None
-    idx = pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq="D") if last_date is not None else list(range(1, horizon + 1))
+    last_date = pd.to_datetime(df["date"].iloc[-1]) if ("date" in df.columns and not df.empty) else None
+    idx = (
+        pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq="D")
+        if last_date is not None
+        else list(range(1, horizon + 1))
+    )
     return fitted, forecast, conf, idx, order, series
 
 

@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Run updated PCA training for all ticker feature files in ml/features."""
-import glob, os, json
-from pathlib import Path
+import datetime
+import glob
 import importlib.util
+import json
+import os
+from pathlib import Path
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 FEATURE_DIR = ROOT / 'ml' / 'features'
@@ -17,8 +22,6 @@ if not files:
     print('No feature files found in', FEATURE_DIR)
     raise SystemExit(1)
 
-import datetime
-
 for f in files:
     print('\nProcessing', f)
     try:
@@ -30,7 +33,6 @@ for f in files:
         os.makedirs(out_dir, exist_ok=True)
         meta_path, comps_path = train_pca.save_artifacts(meta, comps, out_dir, ticker)
         # also save transformed info
-        import numpy as np
         info = {'shape': list(comps.shape), 'dtype': str(comps.dtype), 'sample_min': float(np.nanmin(comps)), 'sample_max': float(np.nanmax(comps))}
         with open(os.path.join(out_dir, f'pca_transformed_{ticker}.json'), 'w') as jf:
             json.dump(info, jf, indent=2)

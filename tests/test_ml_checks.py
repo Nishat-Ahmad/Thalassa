@@ -1,5 +1,8 @@
-import os, json
+import json
+import os
+
 import pandas as pd
+
 
 def test_registry_files_exist():
     REGISTRY = 'ml/registry'  # Assuming REGISTRY is defined like this
@@ -16,9 +19,13 @@ def test_registry_files_exist():
         with open(xgb_cls, "r") as f:
             meta = json.load(f)
         assert meta.get("task") == "classification"
+
+
 def test_api_health(client):
     res = client.get("/health")
     assert res.status_code == 200
+
+
 def test_predict_shape(client):
     # Use baseline if xgb not available; just check response structure
     res = client.post("/predict", json={"features": [0.1, 0.2, 0.3]})
@@ -26,8 +33,7 @@ def test_predict_shape(client):
     # Classifier endpoint existence
     res2 = client.post("/predict-class", json={"features": [0.1, 0.2, 0.3]})
     assert res2.status_code in (200, 400)
-import os, json
-import pandas as pd
+
 
 def test_model_registry_exists():
     meta_path = os.path.join('ml','registry','xgb_model_AAPL.json')
