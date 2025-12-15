@@ -41,6 +41,27 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Prepare ML artifacts
+        run: |
+          set -e
+          # Copy latest run artifacts from ml/registry/AAPL/<timestamp>/ into ml/registry/
+          if [ -d ml/registry/AAPL ]; then
+            latest=$(ls -1d ml/registry/AAPL/*/ 2>/dev/null | sort | tail -n1 || true)
+            if [ -n "$latest" ]; then
+              cp "${latest}"xgb_model_AAPL.json ml/registry/ 2>/dev/null || true
+              cp "${latest}"xgb_classifier_AAPL.json ml/registry/ 2>/dev/null || true
+            fi
+          fi
+          # Ensure feature file exists in ml/features
+          if [ -f ml/features/AAPL.parquet ]; then
+            echo "features present"
+          else
+            src=$(find ml -type f -name 'AAPL.parquet' | head -n1 || true)
+            if [ -n "$src" ]; then
+              mkdir -p ml/features
+              cp "$src" ml/features/AAPL.parquet || true
+            fi
+          fi
       - name: Unit & ML tests
         run: pytest -q
 

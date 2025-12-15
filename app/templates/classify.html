@@ -27,8 +27,6 @@
         <p><strong>Features:</strong> {{ (model_meta.get('features')|length) if model_meta.get('features') else 'N/A' }}</p>
         {% if model_meta.get('metrics') %}
         {% endif %}
-          {# metrics moved to separate card below #}
-        <div style="margin-top:8px"><a class="btn btn-outline" href="/expected-features-class{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Open model JSON</a></div>
       {% else %}
         <p class="muted">No trained classifier metadata found for this ticker.</p>
       {% endif %}
