@@ -76,6 +76,11 @@ jobs:
               echo "No feature source found; tests may fail without ml/features/AAPL.parquet"
             fi
           fi
+      - name: Prepare Parquet File
+        run: |
+          if [ ! -s ml/features/AAPL.parquet ]; then
+            python flows/flow.py
+          fi
       - name: Unit & ML tests
         run: pytest -q
 
