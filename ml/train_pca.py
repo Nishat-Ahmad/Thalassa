@@ -34,7 +34,9 @@ def load_features(path: str) -> pd.DataFrame:
 def fit_pca(df: pd.DataFrame, n_components: int) -> tuple[dict, np.ndarray]:
     # choose numeric feature columns (exclude date/ticker)
     feature_cols = [
-        c for c in df.columns if c not in ["date", "ticker"] and pd.api.types.is_numeric_dtype(df[c])
+        c
+        for c in df.columns
+        if c not in ["date", "ticker"] and pd.api.types.is_numeric_dtype(df[c])
     ]
     if not feature_cols:
         raise ValueError("No numeric feature columns found; cannot fit PCA")
@@ -52,10 +54,10 @@ def fit_pca(df: pd.DataFrame, n_components: int) -> tuple[dict, np.ndarray]:
         X_df = X_df[feature_cols]
 
     # apply log1p to Volume if present to reduce scale/skew
-    if 'Volume' in X_df.columns:
+    if "Volume" in X_df.columns:
         try:
-            X_df['Volume'] = pd.to_numeric(X_df['Volume'], errors='coerce').fillna(0.0)
-            X_df['Volume'] = np.log1p(X_df['Volume'])
+            X_df["Volume"] = pd.to_numeric(X_df["Volume"], errors="coerce").fillna(0.0)
+            X_df["Volume"] = np.log1p(X_df["Volume"])
         except Exception:
             pass
 
@@ -99,7 +101,9 @@ def fit_pca(df: pd.DataFrame, n_components: int) -> tuple[dict, np.ndarray]:
     return meta, comps
 
 
-def save_artifacts(meta: dict, comps: np.ndarray, registry_dir: str, ticker: str) -> tuple[str, str]:
+def save_artifacts(
+    meta: dict, comps: np.ndarray, registry_dir: str, ticker: str
+) -> tuple[str, str]:
     os.makedirs(registry_dir, exist_ok=True)
     meta_path = os.path.join(registry_dir, f"pca_{ticker}.json")
     comps_path = os.path.join(registry_dir, f"pca_transformed_{ticker}.npy")
@@ -110,7 +114,9 @@ def save_artifacts(meta: dict, comps: np.ndarray, registry_dir: str, ticker: str
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train PCA embedding from feature data")
+    parser = argparse.ArgumentParser(
+        description="Train PCA embedding from feature data"
+    )
     parser.add_argument(
         "--features",
         default=os.path.join(os.path.dirname(__file__), "features", "AAPL.parquet"),
@@ -121,7 +127,9 @@ def main():
         default=os.path.join(os.path.dirname(__file__), "registry"),
         help="Output registry directory",
     )
-    parser.add_argument("--n-components", type=int, default=5, help="Number of PCA components")
+    parser.add_argument(
+        "--n-components", type=int, default=5, help="Number of PCA components"
+    )
     args = parser.parse_args()
 
     df = load_features(args.features)
@@ -129,7 +137,12 @@ def main():
     meta, comps = fit_pca(df, args.n_components)
     meta["ticker"] = ticker
     meta_path, comps_path = save_artifacts(meta, comps, args.registry, ticker)
-    print(json.dumps({"status": "ok", "pca_meta": meta_path, "pca_transformed": comps_path}, indent=2))
+    print(
+        json.dumps(
+            {"status": "ok", "pca_meta": meta_path, "pca_transformed": comps_path},
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -22,7 +22,9 @@ os.makedirs(REGISTRY_DIR, exist_ok=True)
 
 FEATURE_FILE = os.path.join(FEATURE_DIR, f"{args.ticker.upper()}.parquet")
 if not os.path.exists(FEATURE_FILE):
-    raise SystemExit(f"Feature file not found: {FEATURE_FILE}. Run flows/flow.py first.")
+    raise SystemExit(
+        f"Feature file not found: {FEATURE_FILE}. Run flows/flow.py first."
+    )
 
 df = pd.read_parquet(FEATURE_FILE)
 # Flatten possible MultiIndex and normalize names

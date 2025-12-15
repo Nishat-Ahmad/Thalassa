@@ -9,6 +9,7 @@ import logging
 import yfinance as yf
 from datetime import datetime, UTC
 from subprocess import Popen, PIPE
+
 try:
     from sklearn.decomposition import PCA
     from sklearn.cluster import KMeans
@@ -39,6 +40,7 @@ def _ticker_from_path(path: str) -> str:
     base = os.path.splitext(os.path.basename(path))[0]
     return base.upper()
 
+
 @task(retries=2, retry_delay_seconds=10)
 def ingest(ticker: str, period: str = "max"):
     logger = logging.getLogger(__name__)
@@ -47,13 +49,21 @@ def ingest(ticker: str, period: str = "max"):
     last_err = None
     for attempt in range(1, max_attempts + 1):
         try:
-            df = yf.download(ticker, period=period, progress=False, timeout=timeout, auto_adjust=False)
+            df = yf.download(
+                ticker,
+                period=period,
+                progress=False,
+                timeout=timeout,
+                auto_adjust=False,
+            )
             if df is None or df.empty:
                 raise RuntimeError(f"yfinance returned empty dataframe for {ticker}")
             # success
             df.reset_index(inplace=True)
             if isinstance(df.columns, pd.MultiIndex):
-                df.columns = [c[0] if isinstance(c, tuple) else str(c) for c in df.columns]
+                df.columns = [
+                    c[0] if isinstance(c, tuple) else str(c) for c in df.columns
+                ]
             df.rename(columns={"Date": "date", "Adj Close": "Adj_Close"}, inplace=True)
             df["ticker"] = ticker
             path = os.path.join(DATA_DIR, f"{ticker}.parquet")
@@ -61,7 +71,13 @@ def ingest(ticker: str, period: str = "max"):
             return path
         except Exception as e:
             last_err = e
-            logger.warning("yfinance download failed for %s (attempt %d/%d): %s", ticker, attempt, max_attempts, e)
+            logger.warning(
+                "yfinance download failed for %s (attempt %d/%d): %s",
+                ticker,
+                attempt,
+                max_attempts,
+                e,
+            )
             if attempt < max_attempts:
                 backoff = 2 ** (attempt - 1)
                 try:
@@ -72,7 +88,10 @@ def ingest(ticker: str, period: str = "max"):
                     pass
             else:
                 # final failure: raise to let Prefect handle retries / failures
-                raise RuntimeError(f"Failed to download data for {ticker} after {max_attempts} attempts: {last_err}")
+                raise RuntimeError(
+                    f"Failed to download data for {ticker} after {max_attempts} attempts: {last_err}"
+                )
+
 
 @task
 def engineer(data_path: str):
@@ -108,11 +127,17 @@ def engineer(data_path: str):
     df.to_parquet(fpath)
     return fpath
 
+
 @task
 def train_regressor(feature_path: str, run_dir: str | None = None):
     df = pd.read_parquet(feature_path)
     y = df["return"].shift(-1)
-    feature_cols = [c for c in df.columns if c not in ["date", "ticker", "return"] and pd.api.types.is_numeric_dtype(df[c])]
+    feature_cols = [
+        c
+        for c in df.columns
+        if c not in ["date", "ticker", "return"]
+        and pd.api.types.is_numeric_dtype(df[c])
+    ]
     X = df[feature_cols]
     mask = (~X.isna().any(axis=1)) & (~y.isna())
     X = X.loc[mask]
@@ -153,10 +178,13 @@ def train_regressor(feature_path: str, run_dir: str | None = None):
         json.dump(meta, f)
     return meta_path
 
+
 @task
 def train_classification(feature_path: str, run_dir: str | None = None):
     ticker = _ticker_from_path(feature_path)
-    script = os.path.join(os.path.dirname(__file__), "..", "ml", "train_classification.py")
+    script = os.path.join(
+        os.path.dirname(__file__), "..", "ml", "train_classification.py"
+    )
     cmd = ["python", script, "--ticker", ticker]
     if run_dir:
         cmd.extend(["--run-dir", run_dir])
@@ -169,6 +197,7 @@ def train_classification(feature_path: str, run_dir: str | None = None):
     except Exception:
         result = {"status": "success"}
     return result
+
 
 @task
 def train_association_rules(
@@ -205,12 +234,17 @@ def train_association_rules(
         result = {"status": "success"}
     return result
 
+
 @task
 def compute_pca(feature_path: str, n_components: int = 5, run_dir: str | None = None):
     if PCA is None:
         return {"status": "skipped", "reason": "sklearn not available"}
     df = pd.read_parquet(feature_path)
-    feature_cols = [c for c in df.columns if c not in ["date", "ticker"] and pd.api.types.is_numeric_dtype(df[c])]
+    feature_cols = [
+        c
+        for c in df.columns
+        if c not in ["date", "ticker"] and pd.api.types.is_numeric_dtype(df[c])
+    ]
     if not feature_cols:
         return {"status": "skipped", "reason": "no numeric features"}
 
@@ -224,10 +258,10 @@ def compute_pca(feature_path: str, n_components: int = 5, run_dir: str | None = 
         X_df = X_df[feature_cols]
 
     # log1p Volume to reduce scale/skew
-    if 'Volume' in X_df.columns:
+    if "Volume" in X_df.columns:
         try:
-            X_df['Volume'] = pd.to_numeric(X_df['Volume'], errors='coerce').fillna(0.0)
-            X_df['Volume'] = np.log1p(X_df['Volume'])
+            X_df["Volume"] = pd.to_numeric(X_df["Volume"], errors="coerce").fillna(0.0)
+            X_df["Volume"] = np.log1p(X_df["Volume"])
         except Exception:
             pass
 
@@ -266,7 +300,11 @@ def compute_pca(feature_path: str, n_components: int = 5, run_dir: str | None = 
     try:
         corr = X_df.corr(method="pearson")
         # represent as nested lists aligned with feature_order
-        corr_matrix = corr.reindex(index=feature_cols, columns=feature_cols).fillna(0.0).values.tolist()
+        corr_matrix = (
+            corr.reindex(index=feature_cols, columns=feature_cols)
+            .fillna(0.0)
+            .values.tolist()
+        )
         meta["feature_correlation"] = corr_matrix
     except Exception:
         meta["feature_correlation"] = None
@@ -275,12 +313,19 @@ def compute_pca(feature_path: str, n_components: int = 5, run_dir: str | None = 
     np.save(os.path.join(target_dir, f"pca_transformed_{ticker}.npy"), comps)
     return {"status": "ok", "pca_meta": meta}
 
+
 @task
-def cluster_features(feature_path: str, n_clusters: int = 5, run_dir: str | None = None):
+def cluster_features(
+    feature_path: str, n_clusters: int = 5, run_dir: str | None = None
+):
     if KMeans is None:
         return {"status": "skipped", "reason": "sklearn not available"}
     df = pd.read_parquet(feature_path)
-    feature_cols = [c for c in df.columns if c not in ["date", "ticker"] and pd.api.types.is_numeric_dtype(df[c])]
+    feature_cols = [
+        c
+        for c in df.columns
+        if c not in ["date", "ticker"] and pd.api.types.is_numeric_dtype(df[c])
+    ]
     X = df[feature_cols].replace([np.inf, -np.inf], np.nan).dropna()
     if len(X) < n_clusters:
         return {"status": "skipped", "reason": "insufficient rows"}
@@ -298,7 +343,9 @@ def cluster_features(feature_path: str, n_clusters: int = 5, run_dir: str | None
         "inertia": float(km.inertia_),
         "centers": km.cluster_centers_.tolist(),
         "feature_order": feature_cols,
-        "label_counts": {int(k): int(v) for k, v in zip(*np.unique(labels, return_counts=True))},
+        "label_counts": {
+            int(k): int(v) for k, v in zip(*np.unique(labels, return_counts=True))
+        },
         "ticker": ticker,
     }
     if scaler is not None:
@@ -309,16 +356,17 @@ def cluster_features(feature_path: str, n_clusters: int = 5, run_dir: str | None
             pass
     # save the original row dates/indices that were used to fit the model so we can align labels later
     try:
-        if 'date' in df.columns:
-            meta['row_index'] = df.loc[X.index, 'date'].astype(str).tolist()
+        if "date" in df.columns:
+            meta["row_index"] = df.loc[X.index, "date"].astype(str).tolist()
         else:
-            meta['row_index'] = [str(i) for i in X.index.tolist()]
+            meta["row_index"] = [str(i) for i in X.index.tolist()]
     except Exception:
-        meta['row_index'] = [str(i) for i in X.index.tolist()]
+        meta["row_index"] = [str(i) for i in X.index.tolist()]
     with open(os.path.join(target_dir, f"clusters_{ticker}.json"), "w") as f:
         json.dump(meta, f)
     np.save(os.path.join(target_dir, f"cluster_labels_{ticker}.npy"), labels)
     return {"status": "ok", "cluster_meta": meta}
+
 
 @task
 def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None):
@@ -332,7 +380,10 @@ def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None)
     series = df.set_index("date")["Close"].astype(float).sort_index()
     # Need at least 3 dates to infer a frequency; if not available, skip forecasting
     if len(series.index) < 3:
-        return {"status": "skipped", "reason": "insufficient dates to infer frequency for forecasting"}
+        return {
+            "status": "skipped",
+            "reason": "insufficient dates to infer frequency for forecasting",
+        }
     try:
         freq = pd.infer_freq(series.index)
     except Exception:
@@ -346,7 +397,9 @@ def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None)
     try:
         # disable automatic re-parameterization enforcement to avoid
         # "Non-stationary starting autoregressive" / "Non-invertible starting MA" warnings
-        model = ARIMA(series, order=order, enforce_stationarity=False, enforce_invertibility=False)
+        model = ARIMA(
+            series, order=order, enforce_stationarity=False, enforce_invertibility=False
+        )
 
         fitted = None
         # Primary attempt: increase max iterations and capture warnings
@@ -355,8 +408,13 @@ def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None)
                 warnings.simplefilter("always")
                 fitted = model.fit(method_kwargs={"maxiter": 500})
                 if w:
-                    logger.warning("ARIMA fit produced warnings: %s", [str(x.message) for x in w])
-                logger.debug("ARIMA mle_retvals (primary): %s", getattr(fitted, "mle_retvals", None))
+                    logger.warning(
+                        "ARIMA fit produced warnings: %s", [str(x.message) for x in w]
+                    )
+                logger.debug(
+                    "ARIMA mle_retvals (primary): %s",
+                    getattr(fitted, "mle_retvals", None),
+                )
         except Exception as e1:
             logger.warning("Primary ARIMA fit failed: %s", e1)
             # Fallback: try a different optimizer with more iterations
@@ -365,8 +423,14 @@ def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None)
                     warnings.simplefilter("always")
                     fitted = model.fit(method="nm", method_kwargs={"maxiter": 1000})
                     if w2:
-                        logger.warning("ARIMA fallback fit produced warnings: %s", [str(x.message) for x in w2])
-                    logger.debug("ARIMA mle_retvals (fallback): %s", getattr(fitted, "mle_retvals", None))
+                        logger.warning(
+                            "ARIMA fallback fit produced warnings: %s",
+                            [str(x.message) for x in w2],
+                        )
+                    logger.debug(
+                        "ARIMA mle_retvals (fallback): %s",
+                        getattr(fitted, "mle_retvals", None),
+                    )
             except Exception as e2:
                 logger.exception("ARIMA fit fallback failed: %s", e2)
                 # Return a clear skipped result so the pipeline can continue
@@ -374,7 +438,10 @@ def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None)
 
         # At this point we should have a fitted model
         if fitted is None:
-            return {"status": "skipped", "reason": "ARIMA fit did not produce a fitted model"}
+            return {
+                "status": "skipped",
+                "reason": "ARIMA fit did not produce a fitted model",
+            }
 
         forecast = fitted.forecast(steps=horizon)
         conf_res = fitted.get_forecast(steps=horizon)
@@ -383,7 +450,9 @@ def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None)
         logger.exception("Unexpected error during ARIMA forecasting: %s", e)
         return {"status": "error", "message": str(e)}
     last_date = series.index[-1]
-    idx = pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq=freq or "D")
+    idx = pd.date_range(
+        last_date + pd.Timedelta(days=1), periods=horizon, freq=freq or "D"
+    )
     ticker = _ticker_from_path(feature_path)
     target_dir = run_dir or os.path.join(REGISTRY_DIR, ticker)
     os.makedirs(target_dir, exist_ok=True)
@@ -392,8 +461,8 @@ def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None)
         "created_at": datetime.now(UTC).isoformat(),
         "horizon": int(horizon),
         "order": list(order),
-        "aic": float(getattr(fitted, 'aic', float('nan'))),
-        "bic": float(getattr(fitted, 'bic', float('nan'))),
+        "aic": float(getattr(fitted, "aic", float("nan"))),
+        "bic": float(getattr(fitted, "bic", float("nan"))),
         "last_observation": float(series.iloc[-1]),
         "predictions": [float(x) for x in forecast.tolist()],
         "dates": [d.isoformat() for d in idx],
@@ -402,14 +471,14 @@ def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None)
     }
     # compute diagnostics (log-likelihood, rmse, mae) when possible
     try:
-        log_likelihood = float(getattr(fitted, 'llf', None))
+        log_likelihood = float(getattr(fitted, "llf", None))
     except Exception:
         log_likelihood = None
     try:
-        resid = np.asarray(getattr(fitted, 'resid', []))
+        resid = np.asarray(getattr(fitted, "resid", []))
         resid = resid[~np.isnan(resid)]
         if resid.size > 0:
-            rmse = float(np.sqrt(np.mean(resid ** 2)))
+            rmse = float(np.sqrt(np.mean(resid**2)))
             mae = float(np.mean(np.abs(resid)))
         else:
             rmse = None
@@ -456,7 +525,10 @@ def predict_next(feature_path: str, run_dir: str | None = None):
         # ensure features exist in df
         missing = [c for c in feats if c not in df.columns]
         if missing:
-            return {"status": "skipped", "reason": f"missing features in feature file: {missing}"}
+            return {
+                "status": "skipped",
+                "reason": f"missing features in feature file: {missing}",
+            }
         last_row = df.iloc[-1]
         vals = [float(last_row[c]) for c in feats]
         dmatrix = xgb.DMatrix(pd.DataFrame([vals], columns=feats))

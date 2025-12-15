@@ -7,6 +7,8 @@ from mlxtend.frequent_patterns import apriori, association_rules
 
 REGISTRY_DIR = os.path.join(os.path.dirname(__file__), "..", "ml", "registry")
 FEATURES_DIR = os.path.join(os.path.dirname(__file__), "..", "ml", "features")
+
+
 def _output_path(ticker: str) -> str:
     return os.path.join(REGISTRY_DIR, f"association_{ticker.upper()}.json")
 
@@ -39,7 +41,12 @@ def _build_itemset_frame(df: pd.DataFrame) -> pd.DataFrame:
     return item_df.clip(0, 1).astype(bool)
 
 
-def compute_association_rules(ticker: str = "AAPL", min_support: float = 0.05, min_confidence: float = 0.5, max_rules: int = 200):
+def compute_association_rules(
+    ticker: str = "AAPL",
+    min_support: float = 0.05,
+    min_confidence: float = 0.5,
+    max_rules: int = 200,
+):
     feat_path = os.path.join(FEATURES_DIR, f"{ticker}.parquet")
     if not os.path.exists(feat_path):
         raise FileNotFoundError(f"Features file missing: {feat_path}")
@@ -48,30 +55,47 @@ def compute_association_rules(ticker: str = "AAPL", min_support: float = 0.05, m
     # Apriori frequent itemsets
     freq = apriori(item_df, min_support=min_support, use_colnames=True)
     if freq.empty:
-        result = {"ticker": ticker, "min_support": min_support, "min_confidence": min_confidence, "rules": []}
+        result = {
+            "ticker": ticker,
+            "min_support": min_support,
+            "min_confidence": min_confidence,
+            "rules": [],
+        }
     else:
-        rules = association_rules(freq, metric="confidence", min_threshold=min_confidence)
+        rules = association_rules(
+            freq, metric="confidence", min_threshold=min_confidence
+        )
         # prefer rules with higher confidence, then lift, then support
         rules = rules.sort_values(["confidence", "lift", "support"], ascending=False)
         # deduplicate symmetric rules coming from the same frequent itemset
         seen_itemsets = set()
         serialized = []
         for _, r in rules.iterrows():
-            ant = frozenset(r["antecedents"]) if r.get("antecedents") is not None else frozenset()
-            cons = frozenset(r["consequents"]) if r.get("consequents") is not None else frozenset()
+            ant = (
+                frozenset(r["antecedents"])
+                if r.get("antecedents") is not None
+                else frozenset()
+            )
+            cons = (
+                frozenset(r["consequents"])
+                if r.get("consequents") is not None
+                else frozenset()
+            )
             full = frozenset(list(ant) + list(cons))
             if not full or full in seen_itemsets:
                 continue
             seen_itemsets.add(full)
-            serialized.append({
-                "antecedents": sorted(list(ant)),
-                "consequents": sorted(list(cons)),
-                "support": float(r["support"]),
-                "confidence": float(r.get("confidence", np.nan)),
-                "lift": float(r.get("lift", np.nan)),
-                "leverage": float(r.get("leverage", np.nan)),
-                "conviction": float(r.get("conviction", np.nan)),
-            })
+            serialized.append(
+                {
+                    "antecedents": sorted(list(ant)),
+                    "consequents": sorted(list(cons)),
+                    "support": float(r["support"]),
+                    "confidence": float(r.get("confidence", np.nan)),
+                    "lift": float(r.get("lift", np.nan)),
+                    "leverage": float(r.get("leverage", np.nan)),
+                    "conviction": float(r.get("conviction", np.nan)),
+                }
+            )
             if len(serialized) >= max_rules:
                 break
         result = {

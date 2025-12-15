@@ -29,6 +29,7 @@ def pipeline(ticker: str = "AAPL", run_dir: str | None = None):
     # After classification training, produce a next-day prediction using the latest features
     try:
         from .steps import predict_next
+
         pred = predict_next(f, run_dir=run_dir)
     except Exception:
         pred = {"status": "skipped", "reason": "predict_next not available"}

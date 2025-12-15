@@ -51,15 +51,22 @@ def _prob_band(p: float, n: int | None, z: float = 1.96):
 def _safe_ticker(ticker: str | None) -> str:
     return (ticker or "AAPL").upper()
 
+
 @router.get("/", response_class=HTMLResponse)
 def root(request: Request):
     return templates.TemplateResponse(
-        "home.html", {"request": request, "title": "Home", "year": datetime.datetime.now().year}
+        "home.html",
+        {"request": request, "title": "Home", "year": datetime.datetime.now().year},
     )
+
 
 @router.get("/data", response_class=HTMLResponse)
 def data_page(request: Request):
-    return templates.TemplateResponse("data.html", {"request": request, "title": "Data", "year": datetime.datetime.now().year})
+    return templates.TemplateResponse(
+        "data.html",
+        {"request": request, "title": "Data", "year": datetime.datetime.now().year},
+    )
+
 
 @router.get("/search", response_class=HTMLResponse)
 def search_page(request: Request, ticker: str | None = None, period: str | None = None):
@@ -117,14 +124,33 @@ def search_page(request: Request, ticker: str | None = None, period: str | None 
                 except Exception:
                     return None
                 return None
+
             ticker_info = {
                 "symbol": t,
                 "name": details.get("longName") or details.get("shortName"),
-                "currency": getattr(info, "currency", None) if info else details.get("currency"),
-                "last_price": r3(getattr(info, "last_price", None) if info else details.get("currentPrice")),
-                "previous_close": r3(getattr(info, "previous_close", None) if info else details.get("previousClose")),
-                "year_high": r3(getattr(info, "year_high", None) if info else details.get("fiftyTwoWeekHigh")),
-                "year_low": r3(getattr(info, "year_low", None) if info else details.get("fiftyTwoWeekLow")),
+                "currency": (
+                    getattr(info, "currency", None) if info else details.get("currency")
+                ),
+                "last_price": r3(
+                    getattr(info, "last_price", None)
+                    if info
+                    else details.get("currentPrice")
+                ),
+                "previous_close": r3(
+                    getattr(info, "previous_close", None)
+                    if info
+                    else details.get("previousClose")
+                ),
+                "year_high": r3(
+                    getattr(info, "year_high", None)
+                    if info
+                    else details.get("fiftyTwoWeekHigh")
+                ),
+                "year_low": r3(
+                    getattr(info, "year_low", None)
+                    if info
+                    else details.get("fiftyTwoWeekLow")
+                ),
             }
 
             # Additional financial summary fields (may be absent depending on ticker/data source)
@@ -133,7 +159,11 @@ def search_page(request: Request, ticker: str | None = None, period: str | None 
             except Exception:
                 market_cap = None
             try:
-                pe = details.get("trailingPE") or details.get("trailingPegRatio") or details.get("peRatio")
+                pe = (
+                    details.get("trailingPE")
+                    or details.get("trailingPegRatio")
+                    or details.get("peRatio")
+                )
             except Exception:
                 pe = None
             try:
@@ -145,13 +175,23 @@ def search_page(request: Request, ticker: str | None = None, period: str | None 
             except Exception:
                 beta = None
 
-            ticker_info.update({
-                "market_cap": market_cap,
-                "pe_ratio": r3(pe) if pe is not None else None,
-                # dividendYield from yfinance is often 0.006 -> show as percent in template if desired
-                "dividend_yield": (round(float(div_yield) * 100, 3) if div_yield is not None else None) if div_yield is not None else None,
-                "beta": r3(beta) if beta is not None else None,
-            })
+            ticker_info.update(
+                {
+                    "market_cap": market_cap,
+                    "pe_ratio": r3(pe) if pe is not None else None,
+                    # dividendYield from yfinance is often 0.006 -> show as percent in template if desired
+                    "dividend_yield": (
+                        (
+                            round(float(div_yield) * 100, 3)
+                            if div_yield is not None
+                            else None
+                        )
+                        if div_yield is not None
+                        else None
+                    ),
+                    "beta": r3(beta) if beta is not None else None,
+                }
+            )
 
             # Company metadata for display
             try:
@@ -171,7 +211,11 @@ def search_page(request: Request, ticker: str | None = None, period: str | None 
             except Exception:
                 website = None
             try:
-                summary = details.get("longBusinessSummary") or details.get("summary") if details else None
+                summary = (
+                    details.get("longBusinessSummary") or details.get("summary")
+                    if details
+                    else None
+                )
             except Exception:
                 summary = None
             try:
@@ -179,14 +223,16 @@ def search_page(request: Request, ticker: str | None = None, period: str | None 
             except Exception:
                 employees = None
 
-            ticker_info.update({
-                "sector": sector,
-                "industry": industry,
-                "country": country,
-                "website": website,
-                "summary": summary,
-                "employees": employees,
-            })
+            ticker_info.update(
+                {
+                    "sector": sector,
+                    "industry": industry,
+                    "country": country,
+                    "website": website,
+                    "summary": summary,
+                    "employees": employees,
+                }
+            )
             df = tk.history(period=period_map[chosen_period])
             if not df.empty:
                 df = df.reset_index()
@@ -214,8 +260,14 @@ def search_page(request: Request, ticker: str | None = None, period: str | None 
         },
     )
 
+
 @router.get("/tasks", response_class=HTMLResponse)
-def tasks_page(request: Request, ticker: str | None = None, ran: int | None = None, ts: str | None = None):
+def tasks_page(
+    request: Request,
+    ticker: str | None = None,
+    ran: int | None = None,
+    ts: str | None = None,
+):
     t = _safe_ticker(ticker)
     return templates.TemplateResponse(
         "tasks.html",
@@ -229,11 +281,17 @@ def tasks_page(request: Request, ticker: str | None = None, ran: int | None = No
         },
     )
 
+
 # Roadmap page removed per request
+
 
 @router.get("/contact", response_class=HTMLResponse)
 def contact_page(request: Request):
-    return templates.TemplateResponse("contact.html", {"request": request, "title": "Support", "year": datetime.datetime.now().year})
+    return templates.TemplateResponse(
+        "contact.html",
+        {"request": request, "title": "Support", "year": datetime.datetime.now().year},
+    )
+
 
 @router.get("/upload", response_class=HTMLResponse)
 def upload_page(request: Request):
@@ -252,7 +310,7 @@ def upload_page(request: Request):
     try:
         model_path, model_meta_path = xgb_paths(t)
         if os.path.exists(model_meta_path):
-            with open(model_meta_path, 'r') as mf:
+            with open(model_meta_path, "r") as mf:
                 model_meta = json.load(mf)
     except Exception:
         model_meta = None
@@ -261,22 +319,54 @@ def upload_page(request: Request):
     try:
         model_path, model_meta_path = xgb_paths(t)
         if os.path.exists(model_meta_path):
-            with open(model_meta_path, 'r') as mf:
+            with open(model_meta_path, "r") as mf:
                 model_meta = json.load(mf)
     except Exception:
         model_meta = None
 
     if booster is None or not feat_names:
-        return templates.TemplateResponse("upload.html", {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "ticker": t, "ts": ts, "model_meta": model_meta})
+        return templates.TemplateResponse(
+            "upload.html",
+            {
+                "request": request,
+                "title": "Upload",
+                "year": datetime.datetime.now().year,
+                "ticker": t,
+                "ts": ts,
+                "model_meta": model_meta,
+            },
+        )
 
-    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    feat_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
+    )
     if not os.path.exists(feat_path):
-        return templates.TemplateResponse("upload.html", {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "ticker": t, "ts": ts, "model_meta": model_meta})
+        return templates.TemplateResponse(
+            "upload.html",
+            {
+                "request": request,
+                "title": "Upload",
+                "year": datetime.datetime.now().year,
+                "ticker": t,
+                "ts": ts,
+                "model_meta": model_meta,
+            },
+        )
 
     try:
         df = pd.read_parquet(feat_path).reset_index(drop=True)
     except Exception:
-        return templates.TemplateResponse("upload.html", {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "ticker": t, "ts": ts, "model_meta": model_meta})
+        return templates.TemplateResponse(
+            "upload.html",
+            {
+                "request": request,
+                "title": "Upload",
+                "year": datetime.datetime.now().year,
+                "ticker": t,
+                "ts": ts,
+                "model_meta": model_meta,
+            },
+        )
 
     # try sorting by date if present and take latest 7 rows
     try:
@@ -291,13 +381,33 @@ def upload_page(request: Request):
     try:
         df_aligned = align_to_booster_features(latest_df, feat_names)
     except Exception:
-        return templates.TemplateResponse("upload.html", {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "ticker": t, "ts": ts, "model_meta": model_meta})
+        return templates.TemplateResponse(
+            "upload.html",
+            {
+                "request": request,
+                "title": "Upload",
+                "year": datetime.datetime.now().year,
+                "ticker": t,
+                "ts": ts,
+                "model_meta": model_meta,
+            },
+        )
 
     try:
         dmat = xgb.DMatrix(df_aligned)
         preds = booster.predict(dmat)
     except Exception:
-        return templates.TemplateResponse("upload.html", {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "ticker": t, "ts": ts, "model_meta": model_meta})
+        return templates.TemplateResponse(
+            "upload.html",
+            {
+                "request": request,
+                "title": "Upload",
+                "year": datetime.datetime.now().year,
+                "ticker": t,
+                "ts": ts,
+                "model_meta": model_meta,
+            },
+        )
 
     dates = None
     if "date" in latest_df.columns:
@@ -323,7 +433,9 @@ def upload_page(request: Request):
 
 
 @router.post("/upload", response_class=HTMLResponse)
-def upload_predict(request: Request, ticker: str | None = Form("AAPL"), ts: str | None = Form(None)):
+def upload_predict(
+    request: Request, ticker: str | None = Form("AAPL"), ts: str | None = Form(None)
+):
     t = _safe_ticker(ticker)
     # load regressor and feature names
     try:
@@ -336,7 +448,7 @@ def upload_predict(request: Request, ticker: str | None = Form("AAPL"), ts: str 
     try:
         model_path, model_meta_path = xgb_paths(t)
         if os.path.exists(model_meta_path):
-            with open(model_meta_path, 'r') as mf:
+            with open(model_meta_path, "r") as mf:
                 model_meta = json.load(mf)
     except Exception:
         model_meta = None
@@ -344,14 +456,32 @@ def upload_predict(request: Request, ticker: str | None = Form("AAPL"), ts: str 
     if booster is None or not feat_names:
         return templates.TemplateResponse(
             "upload.html",
-            {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "error": "XGB model not available. Train it first.", "ticker": t, "ts": ts, "model_meta": model_meta},
+            {
+                "request": request,
+                "title": "Upload",
+                "year": datetime.datetime.now().year,
+                "error": "XGB model not available. Train it first.",
+                "ticker": t,
+                "ts": ts,
+                "model_meta": model_meta,
+            },
         )
 
-    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    feat_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
+    )
     if not os.path.exists(feat_path):
         return templates.TemplateResponse(
             "upload.html",
-            {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "error": f"Features file missing for {t}. Run the pipeline first.", "ticker": t, "ts": ts, "model_meta": model_meta},
+            {
+                "request": request,
+                "title": "Upload",
+                "year": datetime.datetime.now().year,
+                "error": f"Features file missing for {t}. Run the pipeline first.",
+                "ticker": t,
+                "ts": ts,
+                "model_meta": model_meta,
+            },
         )
 
     try:
@@ -359,7 +489,15 @@ def upload_predict(request: Request, ticker: str | None = Form("AAPL"), ts: str 
     except Exception:
         return templates.TemplateResponse(
             "upload.html",
-            {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "error": "Could not read feature parquet for ticker.", "ticker": t, "ts": ts, "model_meta": model_meta},
+            {
+                "request": request,
+                "title": "Upload",
+                "year": datetime.datetime.now().year,
+                "error": "Could not read feature parquet for ticker.",
+                "ticker": t,
+                "ts": ts,
+                "model_meta": model_meta,
+            },
         )
 
     try:
@@ -367,12 +505,28 @@ def upload_predict(request: Request, ticker: str | None = Form("AAPL"), ts: str 
     except HTTPException as e:
         return templates.TemplateResponse(
             "upload.html",
-            {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "error": e.detail, "ticker": t, "ts": ts, "model_meta": model_meta},
+            {
+                "request": request,
+                "title": "Upload",
+                "year": datetime.datetime.now().year,
+                "error": e.detail,
+                "ticker": t,
+                "ts": ts,
+                "model_meta": model_meta,
+            },
         )
     except Exception:
         return templates.TemplateResponse(
             "upload.html",
-            {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "error": "Failed to align features for prediction.", "ticker": t, "ts": ts, "model_meta": model_meta},
+            {
+                "request": request,
+                "title": "Upload",
+                "year": datetime.datetime.now().year,
+                "error": "Failed to align features for prediction.",
+                "ticker": t,
+                "ts": ts,
+                "model_meta": model_meta,
+            },
         )
 
     try:
@@ -381,7 +535,15 @@ def upload_predict(request: Request, ticker: str | None = Form("AAPL"), ts: str 
     except Exception as e:
         return templates.TemplateResponse(
             "upload.html",
-            {"request": request, "title": "Upload", "year": datetime.datetime.now().year, "error": f"Prediction failed: {e}", "ticker": t, "ts": ts, "model_meta": model_meta},
+            {
+                "request": request,
+                "title": "Upload",
+                "year": datetime.datetime.now().year,
+                "error": f"Prediction failed: {e}",
+                "ticker": t,
+                "ts": ts,
+                "model_meta": model_meta,
+            },
         )
 
     # prepare date column if present for display
@@ -407,6 +569,7 @@ def upload_predict(request: Request, ticker: str | None = Form("AAPL"), ts: str 
         },
     )
 
+
 @router.get("/classify", response_class=HTMLResponse)
 def classify_page(request: Request, ticker: str | None = None):
     t = _safe_ticker(ticker)
@@ -422,9 +585,9 @@ def classify_page(request: Request, ticker: str | None = None):
         # build short tokens for UI (same logic as cluster/pca pages)
         try:
             for f in feats:
-                parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+                parts = [p for p in re.split(r"[_\s\-]+", str(f)) if p]
                 if parts:
-                    tok = ''.join([p[0] for p in parts]).upper()
+                    tok = "".join([p[0] for p in parts]).upper()
                     tokens[f] = tok if len(tok) <= 6 else tok[:6]
                 else:
                     tokens[f] = str(f)[:6]
@@ -435,7 +598,11 @@ def classify_page(request: Request, ticker: str | None = None):
     try:
         base = os.path.join(MODEL_REGISTRY, t)
         if os.path.isdir(base):
-            candidates = [os.path.join(base, d) for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))]
+            candidates = [
+                os.path.join(base, d)
+                for d in os.listdir(base)
+                if os.path.isdir(os.path.join(base, d))
+            ]
             preds = []
             for c in candidates:
                 p = os.path.join(c, f"predict_next_{t}.json")
@@ -462,20 +629,36 @@ def classify_page(request: Request, ticker: str | None = None):
     # compute probability band and calibration hints if we have a prediction
     calibration = None
     try:
-        if prediction and isinstance(prediction, dict) and prediction.get("proba_up") is not None:
-            samples = model_meta.get("samples") if isinstance(model_meta, dict) else None
+        if (
+            prediction
+            and isinstance(prediction, dict)
+            and prediction.get("proba_up") is not None
+        ):
+            samples = (
+                model_meta.get("samples") if isinstance(model_meta, dict) else None
+            )
             band = _prob_band(prediction.get("proba_up"), samples)
             calibration = {
                 "band": band,
-                "auc": (model_meta.get("metrics", {}).get("auc") if isinstance(model_meta, dict) else None),
-                "logloss": (model_meta.get("metrics", {}).get("logloss") if isinstance(model_meta, dict) else None),
+                "auc": (
+                    model_meta.get("metrics", {}).get("auc")
+                    if isinstance(model_meta, dict)
+                    else None
+                ),
+                "logloss": (
+                    model_meta.get("metrics", {}).get("logloss")
+                    if isinstance(model_meta, dict)
+                    else None
+                ),
             }
     except Exception:
         calibration = None
     # compute reliability curve (calibration curve) using available features+labels if possible
     reliability = None
     try:
-        feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+        feat_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
+        )
         if os.path.exists(feat_path):
             df_feats = pd.read_parquet(feat_path)
             # derive a simple next-day label similar to training: next-close > close
@@ -493,7 +676,7 @@ def classify_page(request: Request, ticker: str | None = None):
                 # pick numeric columns as a conservative feature set
                 X = dfx.select_dtypes(include=[np.number]).copy()
                 if "log_return" in X.columns:
-                    X = X.drop(columns=["log_return"]) 
+                    X = X.drop(columns=["log_return"])
                 X = X.replace([np.inf, -np.inf], np.nan)
                 try:
                     X = X.fillna(method="ffill").fillna(method="bfill")
@@ -529,7 +712,9 @@ def classify_page(request: Request, ticker: str | None = None):
                         try:
                             from sklearn.calibration import calibration_curve
 
-                            prob_true, prob_pred = calibration_curve(y, probs, n_bins=10, strategy="uniform")
+                            prob_true, prob_pred = calibration_curve(
+                                y, probs, n_bins=10, strategy="uniform"
+                            )
                         except Exception:
                             bins = np.linspace(0.0, 1.0, 11)
                             inds = np.digitize(probs, bins) - 1
@@ -539,14 +724,17 @@ def classify_page(request: Request, ticker: str | None = None):
                                 sel = inds == i
                                 if sel.sum() == 0:
                                     prob_true.append(np.nan)
-                                    prob_pred.append((bins[i] + bins[i+1]) / 2.0)
+                                    prob_pred.append((bins[i] + bins[i + 1]) / 2.0)
                                 else:
                                     prob_true.append(float(np.mean(y[sel])))
                                     prob_pred.append(float(np.mean(probs[sel])))
                             prob_true = np.array(prob_true)
                             prob_pred = np.array(prob_pred)
                         reliability = {
-                            "prob_true": [None if np.isnan(x) else float(x) for x in prob_true.tolist()],
+                            "prob_true": [
+                                None if np.isnan(x) else float(x)
+                                for x in prob_true.tolist()
+                            ],
                             "prob_pred": [float(x) for x in prob_pred.tolist()],
                             "brier": brier,
                             "n": int(len(y)),
@@ -572,14 +760,28 @@ def classify_page(request: Request, ticker: str | None = None):
         },
     )
 
+
 @router.post("/classify", response_class=HTMLResponse)
-def classify_submit(request: Request, values: str = Form(...), ticker: str | None = None):
+def classify_submit(
+    request: Request, values: str = Form(...), ticker: str | None = None
+):
     t = _safe_ticker(ticker)
     cls_model_path, cls_meta_path = xgb_classifier_paths(t)
-    if xgb is None or not (os.path.exists(cls_meta_path) and os.path.exists(cls_model_path)):
+    if xgb is None or not (
+        os.path.exists(cls_meta_path) and os.path.exists(cls_model_path)
+    ):
         return templates.TemplateResponse(
             "classify.html",
-            {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": [], "result": None, "ticker": t, "model_meta": None, "tokens": {}},
+            {
+                "request": request,
+                "title": "Classify",
+                "year": datetime.datetime.now().year,
+                "features": [],
+                "result": None,
+                "ticker": t,
+                "model_meta": None,
+                "tokens": {},
+            },
         )
     booster = xgb.Booster()
     booster.load_model(cls_model_path)
@@ -590,9 +792,9 @@ def classify_submit(request: Request, values: str = Form(...), ticker: str | Non
     tokens = {}
     try:
         for f in feat_names:
-            parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+            parts = [p for p in re.split(r"[_\s\-]+", str(f)) if p]
             if parts:
-                tok = ''.join([p[0] for p in parts]).upper()
+                tok = "".join([p[0] for p in parts]).upper()
                 tokens[f] = tok if len(tok) <= 6 else tok[:6]
             else:
                 tokens[f] = str(f)[:6]
@@ -603,12 +805,30 @@ def classify_submit(request: Request, values: str = Form(...), ticker: str | Non
     except Exception:
         return templates.TemplateResponse(
             "classify.html",
-            {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": None, "ticker": t, "tokens": tokens, "model_meta": meta},
+            {
+                "request": request,
+                "title": "Classify",
+                "year": datetime.datetime.now().year,
+                "features": feat_names,
+                "result": None,
+                "ticker": t,
+                "tokens": tokens,
+                "model_meta": meta,
+            },
         )
     if len(nums) != len(feat_names):
         return templates.TemplateResponse(
             "classify.html",
-            {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": None, "ticker": t, "model_meta": meta, "tokens": tokens},
+            {
+                "request": request,
+                "title": "Classify",
+                "year": datetime.datetime.now().year,
+                "features": feat_names,
+                "result": None,
+                "ticker": t,
+                "model_meta": meta,
+                "tokens": tokens,
+            },
         )
     df = pd.DataFrame([nums], columns=[f.strip() for f in feat_names])
     dmatrix = xgb.DMatrix(df)
@@ -616,8 +836,18 @@ def classify_submit(request: Request, values: str = Form(...), ticker: str | Non
     result = {"proba_up": proba, "label": int(proba >= 0.5)}
     return templates.TemplateResponse(
         "classify.html",
-        {"request": request, "title": "Classify", "year": datetime.datetime.now().year, "features": feat_names, "result": result, "ticker": t, "model_meta": meta, "tokens": tokens},
+        {
+            "request": request,
+            "title": "Classify",
+            "year": datetime.datetime.now().year,
+            "features": feat_names,
+            "result": result,
+            "ticker": t,
+            "model_meta": meta,
+            "tokens": tokens,
+        },
     )
+
 
 @router.get("/pca", response_class=HTMLResponse)
 def pca_page(request: Request, ticker: str | None = None):
@@ -638,9 +868,9 @@ def pca_page(request: Request, ticker: str | None = None):
     tokens = {}
     try:
         for f in features:
-            parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+            parts = [p for p in re.split(r"[_\s\-]+", str(f)) if p]
             if parts:
-                tok = ''.join([p[0] for p in parts]).upper()
+                tok = "".join([p[0] for p in parts]).upper()
                 tokens[f] = tok if len(tok) <= 6 else tok[:6]
             else:
                 tokens[f] = str(f)[:6]
@@ -661,6 +891,7 @@ def pca_page(request: Request, ticker: str | None = None):
         },
     )
 
+
 @router.get("/cluster", response_class=HTMLResponse)
 def cluster_page(request: Request, ticker: str | None = None):
     t = _safe_ticker(ticker)
@@ -680,9 +911,9 @@ def cluster_page(request: Request, ticker: str | None = None):
     tokens = {}
     try:
         for f in features:
-            parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+            parts = [p for p in re.split(r"[_\s\-]+", str(f)) if p]
             if parts:
-                tok = ''.join([p[0] for p in parts]).upper()
+                tok = "".join([p[0] for p in parts]).upper()
                 tokens[f] = tok if len(tok) <= 6 else tok[:6]
             else:
                 tokens[f] = str(f)[:6]
@@ -692,7 +923,9 @@ def cluster_page(request: Request, ticker: str | None = None):
     features_count = None
     training_count = None
     try:
-        feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+        feat_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
+        )
         if os.path.exists(feat_path):
             try:
                 df_feats = pd.read_parquet(feat_path)
@@ -735,8 +968,11 @@ def cluster_page(request: Request, ticker: str | None = None):
         },
     )
 
+
 @router.post("/cluster", response_class=HTMLResponse)
-def cluster_submit(request: Request, values: str = Form(...), ticker: str | None = None):
+def cluster_submit(
+    request: Request, values: str = Form(...), ticker: str | None = None
+):
     t = _safe_ticker(ticker)
     meta_path, _ = cluster_paths(t)
     meta = None
@@ -752,9 +988,9 @@ def cluster_submit(request: Request, values: str = Form(...), ticker: str | None
     tokens = {}
     try:
         for f in features:
-            parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+            parts = [p for p in re.split(r"[_\s\-]+", str(f)) if p]
             if parts:
-                tok = ''.join([p[0] for p in parts]).upper()
+                tok = "".join([p[0] for p in parts]).upper()
                 tokens[f] = tok if len(tok) <= 6 else tok[:6]
             else:
                 tokens[f] = str(f)[:6]
@@ -770,7 +1006,12 @@ def cluster_submit(request: Request, values: str = Form(...), ticker: str | None
             x = np.array(nums, dtype=float)
             mean = meta.get("scaler_mean")
             scale = meta.get("scaler_scale")
-            if isinstance(mean, list) and isinstance(scale, list) and len(mean) == len(x) and len(scale) == len(x):
+            if (
+                isinstance(mean, list)
+                and isinstance(scale, list)
+                and len(mean) == len(x)
+                and len(scale) == len(x)
+            ):
                 mean_arr = np.array(mean, dtype=float)
                 scale_arr = np.array(scale, dtype=float)
                 scale_arr[scale_arr == 0] = 1.0
@@ -795,6 +1036,7 @@ def cluster_submit(request: Request, values: str = Form(...), ticker: str | None
         },
     )
 
+
 @router.get("/forecast-page", response_class=HTMLResponse)
 def forecast_page(request: Request, ticker: str | None = None):
     t = _safe_ticker(ticker)
@@ -811,11 +1053,21 @@ def forecast_page(request: Request, ticker: str | None = None):
         error = "No persisted forecast found. Run pipeline or submit a horizon to compute one."
     return templates.TemplateResponse(
         "forecast.html",
-        {"request": request, "title": "Forecast", "year": datetime.datetime.now().year, "forecast": data, "error": error, "ticker": t},
+        {
+            "request": request,
+            "title": "Forecast",
+            "year": datetime.datetime.now().year,
+            "forecast": data,
+            "error": error,
+            "ticker": t,
+        },
     )
 
+
 @router.post("/forecast-page", response_class=HTMLResponse)
-async def forecast_page_submit(request: Request, horizon: int = Form(7), ticker: str | None = Form(None)):
+async def forecast_page_submit(
+    request: Request, horizon: int = Form(7), ticker: str | None = Form(None)
+):
     # Prefer the explicit form field, then query param, then Referer; fallback handled by _safe_ticker
     form = await request.form()
     form_ticker = form.get("ticker") if form is not None else None
@@ -837,9 +1089,13 @@ async def forecast_page_submit(request: Request, horizon: int = Form(7), ticker:
     error = None
     result = None
     if ARIMA is None:
-        error = "statsmodels not installed on server; cannot compute on-demand forecast."
+        error = (
+            "statsmodels not installed on server; cannot compute on-demand forecast."
+        )
     else:
-        feature_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+        feature_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
+        )
         if not os.path.exists(feature_path):
             error = f"Features file missing ({t}.parquet). Run pipeline first."
         else:
@@ -862,12 +1118,16 @@ async def forecast_page_submit(request: Request, horizon: int = Form(7), ticker:
                     conf_res = fitted.get_forecast(steps=horizon)
                     conf = conf_res.conf_int().values.tolist()
                     last_date = series.index[-1]
-                    idx = pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq=freq or "D")
+                    idx = pd.date_range(
+                        last_date + pd.Timedelta(days=1),
+                        periods=horizon,
+                        freq=freq or "D",
+                    )
                     result = {
                         "horizon": int(horizon),
                         "order": list(order),
-                        "aic": float(getattr(fitted, 'aic', float('nan'))),
-                        "bic": float(getattr(fitted, 'bic', float('nan'))),
+                        "aic": float(getattr(fitted, "aic", float("nan"))),
+                        "bic": float(getattr(fitted, "bic", float("nan"))),
                         "last_observation": float(series.iloc[-1]),
                         "dates": [d.isoformat() for d in idx],
                         "predictions": [float(x) for x in fc_vals.tolist()],
@@ -885,16 +1145,16 @@ async def forecast_page_submit(request: Request, horizon: int = Form(7), ticker:
         rmse = None
         mae = None
         try:
-            if 'fitted' in locals() and hasattr(fitted, 'llf'):
-                log_likelihood = float(getattr(fitted, 'llf', None))
+            if "fitted" in locals() and hasattr(fitted, "llf"):
+                log_likelihood = float(getattr(fitted, "llf", None))
         except Exception:
             log_likelihood = None
         try:
-            if 'fitted' in locals() and hasattr(fitted, 'resid'):
-                resid = np.asarray(getattr(fitted, 'resid'))
+            if "fitted" in locals() and hasattr(fitted, "resid"):
+                resid = np.asarray(getattr(fitted, "resid"))
                 resid = resid[~np.isnan(resid)]
                 if resid.size > 0:
-                    rmse = float(np.sqrt(np.mean(resid ** 2)))
+                    rmse = float(np.sqrt(np.mean(resid**2)))
                     mae = float(np.mean(np.abs(resid)))
         except Exception:
             rmse = None
@@ -939,6 +1199,7 @@ async def forecast_page_submit(request: Request, horizon: int = Form(7), ticker:
     # the browser URL reflects the selected ticker (e.g. ?ticker=MSFT).
     return RedirectResponse(url=f"/forecast-page?ticker={t}", status_code=303)
 
+
 @router.get("/recommend-page", response_class=HTMLResponse)
 def recommend_page(request: Request, ticker: str | None = None):
     t = _safe_ticker(ticker)
@@ -961,9 +1222,9 @@ def recommend_page(request: Request, ticker: str | None = None):
     tokens = {}
     try:
         for f in features:
-            parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+            parts = [p for p in re.split(r"[_\s\-]+", str(f)) if p]
             if parts:
-                tok = ''.join([p[0] for p in parts]).upper()
+                tok = "".join([p[0] for p in parts]).upper()
                 tokens[f] = tok if len(tok) <= 6 else tok[:6]
             else:
                 tokens[f] = str(f)[:6]
@@ -973,9 +1234,9 @@ def recommend_page(request: Request, ticker: str | None = None):
     tokens = {}
     try:
         for f in features:
-            parts = [p for p in re.split(r'[_\s\-]+', str(f)) if p]
+            parts = [p for p in re.split(r"[_\s\-]+", str(f)) if p]
             if parts:
-                tok = ''.join([p[0] for p in parts]).upper()
+                tok = "".join([p[0] for p in parts]).upper()
                 tokens[f] = tok if len(tok) <= 6 else tok[:6]
             else:
                 tokens[f] = str(f)[:6]
@@ -995,6 +1256,7 @@ def recommend_page(request: Request, ticker: str | None = None):
             "ticker": t,
         },
     )
+
 
 @router.post("/recommend-page", response_class=HTMLResponse)
 def recommend_page_submit(
@@ -1043,7 +1305,10 @@ def recommend_page_submit(
                     z = np.dot(x - mean, components.T)
                     dists = np.linalg.norm(comps - z, axis=1)
                     nn_idx = np.argsort(dists)[:k]
-                    neighbors = [{"date": row_index[i], "distance": float(dists[i])} for i in nn_idx]
+                    neighbors = [
+                        {"date": row_index[i], "distance": float(dists[i])}
+                        for i in nn_idx
+                    ]
         else:
             if not row_index:
                 error = "Row index missing in PCA metadata."
@@ -1057,7 +1322,14 @@ def recommend_page_submit(
                 dists = np.linalg.norm(comps - target, axis=1)
                 dists[idx] = np.inf
                 nn_idx = np.argsort(dists)[:k]
-                feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+                feat_path = os.path.join(
+                    os.path.dirname(__file__),
+                    "..",
+                    "..",
+                    "ml",
+                    "features",
+                    f"{t}.parquet",
+                )
                 closes = {}
                 next_returns_map = {}
                 if os.path.exists(feat_path):
@@ -1066,9 +1338,21 @@ def recommend_page_submit(
                     if "Close" in fdf.columns:
                         fdf["Close"] = pd.to_numeric(fdf["Close"], errors="coerce")
                         fdf["next_close"] = fdf["Close"].shift(-1)
-                        fdf["next_return"] = (fdf["next_close"] - fdf["Close"]) / fdf["Close"]
-                        closes = dict(zip(fdf["date"], fdf.get("Close", pd.Series([None] * len(fdf)))))
-                        next_returns_map = dict(zip(fdf["date"], fdf.get("next_return", pd.Series([None] * len(fdf)))))
+                        fdf["next_return"] = (fdf["next_close"] - fdf["Close"]) / fdf[
+                            "Close"
+                        ]
+                        closes = dict(
+                            zip(
+                                fdf["date"],
+                                fdf.get("Close", pd.Series([None] * len(fdf))),
+                            )
+                        )
+                        next_returns_map = dict(
+                            zip(
+                                fdf["date"],
+                                fdf.get("next_return", pd.Series([None] * len(fdf))),
+                            )
+                        )
                     else:
                         closes = dict(zip(fdf["date"], pd.Series([None] * len(fdf))))
                 neighbors = []
@@ -1082,10 +1366,25 @@ def recommend_page_submit(
                     nr = None
                     if next_returns_map:
                         v = next_returns_map.get(dt)
-                        nr = None if v is None or (isinstance(v, float) and (np.isnan(v))) else float(v)
-                    neighbors.append({"date": dt, "distance": dval, "close": close_val, "next_return": nr})
+                        nr = (
+                            None
+                            if v is None or (isinstance(v, float) and (np.isnan(v)))
+                            else float(v)
+                        )
+                    neighbors.append(
+                        {
+                            "date": dt,
+                            "distance": dval,
+                            "close": close_val,
+                            "next_return": nr,
+                        }
+                    )
                 # compute neighbor next-day return summary stats (if available)
-                nr_vals = [n.get("next_return") for n in neighbors if n.get("next_return") is not None]
+                nr_vals = [
+                    n.get("next_return")
+                    for n in neighbors
+                    if n.get("next_return") is not None
+                ]
                 if nr_vals:
                     avg_next = float(np.mean(nr_vals))
                     med_next = float(np.median(nr_vals))
@@ -1101,16 +1400,17 @@ def recommend_page_submit(
             "dates": dates,
             "features": features,
             "neighbors": neighbors,
-            "avg_next_return": (avg_next if 'avg_next' in locals() else None),
-            "median_next_return": (med_next if 'med_next' in locals() else None),
-            "std_next_return": (std_next if 'std_next' in locals() else None),
-            "tokens": (locals().get('tokens') if 'tokens' in locals() else {}),
+            "avg_next_return": (avg_next if "avg_next" in locals() else None),
+            "median_next_return": (med_next if "med_next" in locals() else None),
+            "std_next_return": (std_next if "std_next" in locals() else None),
+            "tokens": (locals().get("tokens") if "tokens" in locals() else {}),
             "error": error,
             "selected_date": date,
             "mode": mode,
             "ticker": t,
         },
     )
+
 
 @router.get("/association-page", response_class=HTMLResponse)
 def association_page(request: Request, ticker: str | None = None):
@@ -1134,7 +1434,9 @@ def association_page(request: Request, ticker: str | None = None):
             assoc_meta["last_run"] = datetime.datetime.fromtimestamp(mtime).isoformat()
             assoc_meta["rules_path"] = f"/association-info?ticker={t}"
         # try to inspect features file for feature count and list
-        feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+        feat_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
+        )
         if os.path.exists(feat_path):
             try:
                 df_feats = pd.read_parquet(feat_path)

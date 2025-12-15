@@ -47,7 +47,9 @@ def build_itemset_frame(df: pd.DataFrame) -> pd.DataFrame:
     return item_df.clip(0, 1).astype(bool)
 
 
-def train_association(df: pd.DataFrame, min_support: float, min_confidence: float, max_rules: int):
+def train_association(
+    df: pd.DataFrame, min_support: float, min_confidence: float, max_rules: int
+):
     item_df = build_itemset_frame(df)
     freq = apriori(item_df, min_support=min_support, use_colnames=True)
     if freq.empty:
@@ -64,21 +66,31 @@ def train_association(df: pd.DataFrame, min_support: float, min_confidence: floa
     seen_itemsets = set()
     serialized = []
     for _, r in rules.iterrows():
-        ant = frozenset(r["antecedents"]) if r.get("antecedents") is not None else frozenset()
-        cons = frozenset(r["consequents"]) if r.get("consequents") is not None else frozenset()
+        ant = (
+            frozenset(r["antecedents"])
+            if r.get("antecedents") is not None
+            else frozenset()
+        )
+        cons = (
+            frozenset(r["consequents"])
+            if r.get("consequents") is not None
+            else frozenset()
+        )
         full = frozenset(list(ant) + list(cons))
         if not full or full in seen_itemsets:
             continue
         seen_itemsets.add(full)
-        serialized.append({
-            "antecedents": sorted(list(ant)),
-            "consequents": sorted(list(cons)),
-            "support": float(r["support"]),
-            "confidence": float(r.get("confidence", np.nan)),
-            "lift": float(r.get("lift", np.nan)),
-            "leverage": float(r.get("leverage", np.nan)),
-            "conviction": float(r.get("conviction", np.nan)),
-        })
+        serialized.append(
+            {
+                "antecedents": sorted(list(ant)),
+                "consequents": sorted(list(cons)),
+                "support": float(r["support"]),
+                "confidence": float(r.get("confidence", np.nan)),
+                "lift": float(r.get("lift", np.nan)),
+                "leverage": float(r.get("leverage", np.nan)),
+                "conviction": float(r.get("conviction", np.nan)),
+            }
+        )
         if len(serialized) >= max_rules:
             break
     return {
@@ -90,7 +102,9 @@ def train_association(df: pd.DataFrame, min_support: float, min_confidence: floa
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train association rules from feature data")
+    parser = argparse.ArgumentParser(
+        description="Train association rules from feature data"
+    )
     parser.add_argument(
         "--features",
         default=os.path.join(os.path.dirname(__file__), "features", "AAPL.parquet"),
@@ -101,13 +115,19 @@ def main():
         default=os.path.join(os.path.dirname(__file__), "registry"),
         help="Output registry directory",
     )
-    parser.add_argument("--min-support", type=float, default=0.05, help="Minimum support for itemsets")
-    parser.add_argument("--min-confidence", type=float, default=0.5, help="Minimum confidence for rules")
+    parser.add_argument(
+        "--min-support", type=float, default=0.05, help="Minimum support for itemsets"
+    )
+    parser.add_argument(
+        "--min-confidence", type=float, default=0.5, help="Minimum confidence for rules"
+    )
     parser.add_argument("--max-rules", type=int, default=100, help="Max rules to keep")
     args = parser.parse_args()
 
     df = load_features(args.features)
-    result = train_association(df, args.min_support, args.min_confidence, args.max_rules)
+    result = train_association(
+        df, args.min_support, args.min_confidence, args.max_rules
+    )
     ticker = os.path.splitext(os.path.basename(args.features))[0]
     out = {
         "ticker": ticker,
@@ -119,7 +139,12 @@ def main():
     with open(out_path, "w") as f:
         json.dump(out, f, indent=2)
 
-    print(json.dumps({"status": "ok", "association": out_path, "n_rules": out["n_rules"]}, indent=2))
+    print(
+        json.dumps(
+            {"status": "ok", "association": out_path, "n_rules": out["n_rules"]},
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ try:
 except Exception:
     xgb = None
 
+
 def load_xgb(ticker: str | None = None):
     if xgb is None:
         return None, None
@@ -40,7 +41,10 @@ def load_xgb_classifier(ticker: str | None = None):
     booster_feats = booster.feature_names or feats
     return booster, booster_feats
 
-def align_to_booster_features(df: pd.DataFrame, booster_feats: list[str]) -> pd.DataFrame:
+
+def align_to_booster_features(
+    df: pd.DataFrame, booster_feats: list[str]
+) -> pd.DataFrame:
     clean_cols = {c.strip(): c for c in df.columns}
     assembled = {}
     missing = []
@@ -58,5 +62,7 @@ def align_to_booster_features(df: pd.DataFrame, booster_feats: list[str]) -> pd.
             continue
         assembled[bf] = series
     if missing:
-        raise HTTPException(status_code=400, detail=f"Missing features required by model: {missing}")
+        raise HTTPException(
+            status_code=400, detail=f"Missing features required by model: {missing}"
+        )
     return pd.DataFrame(assembled)[booster_feats]

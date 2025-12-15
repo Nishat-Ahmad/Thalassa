@@ -15,7 +15,9 @@ import pandas as pd
 try:
     from statsmodels.tsa.arima.model import ARIMA
 except Exception as e:  # pragma: no cover - missing dependency
-    raise SystemExit("statsmodels is required for forecasting. Install statsmodels.") from e
+    raise SystemExit(
+        "statsmodels is required for forecasting. Install statsmodels."
+    ) from e
 
 
 def load_series(path: str) -> pd.DataFrame:
@@ -51,7 +53,11 @@ def fit_arima(df: pd.DataFrame, horizon: int):
     forecast = fitted.forecast(steps=horizon)
     conf_res = fitted.get_forecast(steps=horizon)
     conf = conf_res.conf_int()
-    last_date = pd.to_datetime(df["date"].iloc[-1]) if ("date" in df.columns and not df.empty) else None
+    last_date = (
+        pd.to_datetime(df["date"].iloc[-1])
+        if ("date" in df.columns and not df.empty)
+        else None
+    )
     idx = (
         pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq="D")
         if last_date is not None
@@ -60,7 +66,9 @@ def fit_arima(df: pd.DataFrame, horizon: int):
     return fitted, forecast, conf, idx, order, series
 
 
-def save_forecast(fitted, forecast, conf, idx, order, series, registry_dir: str, ticker: str):
+def save_forecast(
+    fitted, forecast, conf, idx, order, series, registry_dir: str, ticker: str
+):
     os.makedirs(registry_dir, exist_ok=True)
     # diagnostics
     log_likelihood = None
@@ -74,7 +82,7 @@ def save_forecast(fitted, forecast, conf, idx, order, series, registry_dir: str,
         resid = np.asarray(getattr(fitted, "resid", []))
         resid = resid[~np.isnan(resid)]
         if resid.size > 0:
-            rmse = float(np.sqrt(np.mean(resid ** 2)))
+            rmse = float(np.sqrt(np.mean(resid**2)))
             mae = float(np.mean(np.abs(resid)))
     except Exception:
         rmse = None
@@ -85,11 +93,13 @@ def save_forecast(fitted, forecast, conf, idx, order, series, registry_dir: str,
         "created_at": datetime.now(UTC).isoformat(),
         "horizon": int(len(forecast)),
         "order": list(order),
-        "aic": float(getattr(fitted, 'aic', float('nan'))),
-        "bic": float(getattr(fitted, 'bic', float('nan'))),
+        "aic": float(getattr(fitted, "aic", float("nan"))),
+        "bic": float(getattr(fitted, "bic", float("nan"))),
         "last_observation": float(series.iloc[-1]),
         "predictions": [float(x) for x in forecast.tolist()],
-        "dates": [d.isoformat() if not isinstance(d, (int, float)) else str(d) for d in idx],
+        "dates": [
+            d.isoformat() if not isinstance(d, (int, float)) else str(d) for d in idx
+        ],
         "confidence_interval": conf.values.tolist(),
         "ticker": ticker.upper(),
         "log_likelihood": log_likelihood,
@@ -103,7 +113,9 @@ def save_forecast(fitted, forecast, conf, idx, order, series, registry_dir: str,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train ARIMA forecast from feature data")
+    parser = argparse.ArgumentParser(
+        description="Train ARIMA forecast from feature data"
+    )
     parser.add_argument(
         "--features",
         default=os.path.join(os.path.dirname(__file__), "features", "AAPL.parquet"),
@@ -114,13 +126,17 @@ def main():
         default=os.path.join(os.path.dirname(__file__), "registry"),
         help="Output registry directory",
     )
-    parser.add_argument("--horizon", type=int, default=7, help="Forecast horizon in days")
+    parser.add_argument(
+        "--horizon", type=int, default=7, help="Forecast horizon in days"
+    )
     args = parser.parse_args()
 
     df = load_series(args.features)
     ticker = os.path.splitext(os.path.basename(args.features))[0]
     fitted, forecast, conf, idx, order, series = fit_arima(df, args.horizon)
-    out_path = save_forecast(fitted, forecast, conf, idx, order, series, args.registry, ticker)
+    out_path = save_forecast(
+        fitted, forecast, conf, idx, order, series, args.registry, ticker
+    )
     print(json.dumps({"status": "ok", "forecast": out_path}, indent=2))
 
 

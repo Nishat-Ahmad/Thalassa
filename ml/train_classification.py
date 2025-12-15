@@ -20,6 +20,7 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 FEATURES_DIR = os.path.join(os.path.dirname(__file__), "features")
 REGISTRY_DIR = os.path.join(BASE_DIR, "registry")
 
+
 def _paths_for_ticker(ticker: str, registry_dir: str | None = None) -> tuple[str, str]:
     base = registry_dir or REGISTRY_DIR
     t = ticker.upper()
@@ -33,10 +34,18 @@ def load_latest_features(ticker: str) -> pd.DataFrame:
         os.makedirs(FEATURES_DIR, exist_ok=True)
         # Attempt to bootstrap features if none are present
         bootstrap_features(ticker=ticker)
-    files = [f for f in os.listdir(FEATURES_DIR) if f.endswith('.parquet') or f.endswith('.csv')]
+    files = [
+        f
+        for f in os.listdir(FEATURES_DIR)
+        if f.endswith(".parquet") or f.endswith(".csv")
+    ]
     if not files:
         bootstrap_features(ticker=ticker)
-        files = [f for f in os.listdir(FEATURES_DIR) if f.endswith('.parquet') or f.endswith('.csv')]
+        files = [
+            f
+            for f in os.listdir(FEATURES_DIR)
+            if f.endswith(".parquet") or f.endswith(".csv")
+        ]
         if not files:
             raise FileNotFoundError("no feature files found after bootstrap")
     # Prefer file that matches ticker
@@ -50,13 +59,15 @@ def load_latest_features(ticker: str) -> pd.DataFrame:
         files.sort()
         target_file = files[-1]
     path = os.path.join(FEATURES_DIR, target_file)
-    if path.endswith('.parquet'):
+    if path.endswith(".parquet"):
         df = pd.read_parquet(path)
     else:
         df = pd.read_csv(path)
     # Flatten multiindex if present
     if isinstance(df.columns, pd.MultiIndex):
-        df.columns = [' '.join([str(x) for x in tup if str(x) != '']) for tup in df.columns]
+        df.columns = [
+            " ".join([str(x) for x in tup if str(x) != ""]) for tup in df.columns
+        ]
     return df
 
 
@@ -97,16 +108,18 @@ def bootstrap_features(ticker: str = "AAPL", period: str = "2y"):
     df.to_parquet(out)
 
 
-def build_labels(df: pd.DataFrame, target_col: str | None = None) -> tuple[pd.DataFrame, np.ndarray]:
+def build_labels(
+    df: pd.DataFrame, target_col: str | None = None
+) -> tuple[pd.DataFrame, np.ndarray]:
     # Use next-day return classification: up (1) if return > 0 else down (0)
     # If a `log_return` exists, use it; else compute from Close.
     dfx = df.copy()
     if target_col and target_col in dfx.columns:
         ret = dfx[target_col]
-    elif 'log_return' in dfx.columns:
-        ret = dfx['log_return']
-    elif 'Close' in dfx.columns:
-        close = dfx['Close'].astype(float)
+    elif "log_return" in dfx.columns:
+        ret = dfx["log_return"]
+    elif "Close" in dfx.columns:
+        close = dfx["Close"].astype(float)
         ret = (close.shift(-1) - close) / close
     else:
         raise ValueError("No suitable target columns found (log_return or Close)")
@@ -115,11 +128,11 @@ def build_labels(df: pd.DataFrame, target_col: str | None = None) -> tuple[pd.Da
     # Drop rows with NaN target
     valid = ~np.isnan(ret)
     dfx = dfx.loc[valid]
-    y = y[valid.values if hasattr(valid, 'values') else valid]
+    y = y[valid.values if hasattr(valid, "values") else valid]
     # Keep only numeric features
     X = dfx.select_dtypes(include=[np.number])
     # Drop target leakage columns
-    for col in ['log_return']:
+    for col in ["log_return"]:
         if col in X.columns:
             X = X.drop(columns=[col])
         # Replace infinities with NaN
@@ -127,7 +140,7 @@ def build_labels(df: pd.DataFrame, target_col: str | None = None) -> tuple[pd.Da
         # Impute missing feature values conservatively so we don't lose many rows
         # forward-fill then back-fill then fill remaining with column median
         try:
-            X = X.fillna(method='ffill').fillna(method='bfill')
+            X = X.fillna(method="ffill").fillna(method="bfill")
         except Exception:
             pass
         # for any remaining NAs, fill with median per-column
@@ -154,7 +167,11 @@ def train_classifier(ticker: str = "AAPL", registry_dir: str | None = None):
     MIN_SAMPLES = 30
     if len(X) < MIN_SAMPLES:
         # return a skipped result instead of raising so the pipeline can continue
-        return {"status": "skipped", "reason": "not enough samples to train classifier", "samples": int(len(X))}
+        return {
+            "status": "skipped",
+            "reason": "not enough samples to train classifier",
+            "samples": int(len(X)),
+        }
 
     dtrain = xgb.DMatrix(X, label=y, feature_names=[str(c) for c in X.columns])
     params = {
@@ -172,10 +189,13 @@ def train_classifier(ticker: str = "AAPL", registry_dir: str | None = None):
     preds = booster.predict(dtrain)
     # Metrics
     eps = 1e-15
-    logloss = float(np.mean(-(y * np.log(preds + eps) + (1 - y) * np.log(1 - preds + eps))))
+    logloss = float(
+        np.mean(-(y * np.log(preds + eps) + (1 - y) * np.log(1 - preds + eps)))
+    )
     auc = float(np.nan)
     try:
         from sklearn.metrics import roc_auc_score
+
         auc = float(roc_auc_score(y, preds))
     except Exception:
         pass
@@ -207,7 +227,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train XGB classifier")
     parser.add_argument("--ticker", default="AAPL", help="Ticker symbol to train on")
     parser.add_argument("--registry", default=None, help="Override registry directory")
-    parser.add_argument("--run-dir", default=None, help="Optional run directory to place outputs")
+    parser.add_argument(
+        "--run-dir", default=None, help="Optional run directory to place outputs"
+    )
     args = parser.parse_args()
     registry = args.run_dir or args.registry
     out = train_classifier(args.ticker, registry_dir=registry)

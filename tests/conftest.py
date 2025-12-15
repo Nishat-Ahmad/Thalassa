@@ -31,7 +31,9 @@ def setup_ml_artifacts():
     if repo_feat.exists():
         # copy repo feature file into the working directory for tests
         try:
-            with open(repo_feat, "rb") as src, open(cwd_features / "AAPL.parquet", "wb") as dst:
+            with open(repo_feat, "rb") as src, open(
+                cwd_features / "AAPL.parquet", "wb"
+            ) as dst:
                 dst.write(src.read())
             # read into df for metadata creation
             df = pd.read_parquet(repo_feat)
@@ -43,8 +45,14 @@ def setup_ml_artifacts():
     # Create a small synthetic features dataframe if none available from repo
     if df is None:
         dates = pd.date_range(end=pd.Timestamp.today(), periods=60, freq="D")
-        close = (pd.Series(np.linspace(100.0, 120.0, num=len(dates))))
-        df = pd.DataFrame({"date": dates, "Close": close, "Volume": np.random.randint(100, 1000, size=len(dates))})
+        close = pd.Series(np.linspace(100.0, 120.0, num=len(dates)))
+        df = pd.DataFrame(
+            {
+                "date": dates,
+                "Close": close,
+                "Volume": np.random.randint(100, 1000, size=len(dates)),
+            }
+        )
     df["return"] = df["Close"].pct_change().fillna(0.0)
     df["log_return"] = np.log(df["Close"]).diff().fillna(0.0)
     for lag in [1, 2, 3]:
@@ -58,7 +66,9 @@ def setup_ml_artifacts():
             df.to_parquet(feat_path)
         # ensure working dir features copy exists
         if not (cwd_features / "AAPL.parquet").exists():
-            with open(feat_path, "rb") as src, open(cwd_features / "AAPL.parquet", "wb") as dst:
+            with open(feat_path, "rb") as src, open(
+                cwd_features / "AAPL.parquet", "wb"
+            ) as dst:
                 dst.write(src.read())
     except Exception:
         # fallback to CSV
@@ -70,13 +80,18 @@ def setup_ml_artifacts():
             pass
 
     # Minimal registry metadata to satisfy tests
-    meta = {"metrics": {"rmse": 0.1}, "features": [str(c) for c in df.select_dtypes(include=[np.number]).columns]}
+    meta = {
+        "metrics": {"rmse": 0.1},
+        "features": [str(c) for c in df.select_dtypes(include=[np.number]).columns],
+    }
     # Prefer existing registry artifacts if present in repo; otherwise write minimal metadata
     repo_model = registry_dir / "xgb_model_AAPL.json"
     repo_cls = registry_dir / "xgb_classifier_AAPL.json"
     if repo_model.exists():
         try:
-            with open(repo_model, "r") as src, open(cwd_registry / "xgb_model_AAPL.json", "w") as dst:
+            with open(repo_model, "r") as src, open(
+                cwd_registry / "xgb_model_AAPL.json", "w"
+            ) as dst:
                 dst.write(src.read())
         except Exception:
             pass
@@ -91,12 +106,17 @@ def setup_ml_artifacts():
 
     if repo_cls.exists():
         try:
-            with open(repo_cls, "r") as src, open(cwd_registry / "xgb_classifier_AAPL.json", "w") as dst:
+            with open(repo_cls, "r") as src, open(
+                cwd_registry / "xgb_classifier_AAPL.json", "w"
+            ) as dst:
                 dst.write(src.read())
         except Exception:
             pass
     else:
-        cls_meta = {"task": "classification", "features": [str(c) for c in df.select_dtypes(include=[np.number]).columns]}
+        cls_meta = {
+            "task": "classification",
+            "features": [str(c) for c in df.select_dtypes(include=[np.number]).columns],
+        }
         with open(registry_dir / "xgb_classifier_AAPL.json", "w") as f:
             json.dump(cls_meta, f)
         try:

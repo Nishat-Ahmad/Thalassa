@@ -42,6 +42,7 @@ def _load_pipeline():
     if str(root) not in sys.path:
         sys.path.append(str(root))
     from flows.flow import pipeline  # type: ignore
+
     return pipeline
 
 
@@ -78,11 +79,18 @@ def run_pipeline(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pipeline failed for {t}: {e}")
 
-    payload = {"status": "ok", "ticker": t, "result_keys": list(result.keys()) if result else [], "ts": ts}
+    payload = {
+        "status": "ok",
+        "ticker": t,
+        "result_keys": list(result.keys()) if result else [],
+        "ts": ts,
+    }
 
     accept = request.headers.get("accept", "")
     content_type = request.headers.get("content-type", "")
-    if "text/html" in accept or content_type.startswith("application/x-www-form-urlencoded"):
+    if "text/html" in accept or content_type.startswith(
+        "application/x-www-form-urlencoded"
+    ):
         return RedirectResponse(url=f"/tasks?ticker={t}&ran=1&ts={ts}", status_code=303)
     return payload
 
@@ -104,7 +112,9 @@ def _sanitize_for_json(obj):
         return None
     if isinstance(obj, (str, bool, int)):
         return obj
-    if isinstance(obj, float) or (hasattr(obj, 'dtype') and np.issubdtype(getattr(obj, 'dtype'), np.floating)):
+    if isinstance(obj, float) or (
+        hasattr(obj, "dtype") and np.issubdtype(getattr(obj, "dtype"), np.floating)
+    ):
         try:
             val = float(obj)
             return val if math.isfinite(val) else None
@@ -141,14 +151,22 @@ def _collect_artifacts(ticker: str | None = None, run_dir: str | None = None):
     else:
         # try to find a run dir by seeing where xgb meta would live
         xgb_model_path, xgb_meta_path = xgb_paths(t)
-        candidate_dir = os.path.dirname(xgb_meta_path) if xgb_meta_path else MODEL_REGISTRY
-        if not os.path.isdir(candidate_dir) or (candidate_dir == MODEL_REGISTRY and not os.listdir(candidate_dir)):
+        candidate_dir = (
+            os.path.dirname(xgb_meta_path) if xgb_meta_path else MODEL_REGISTRY
+        )
+        if not os.path.isdir(candidate_dir) or (
+            candidate_dir == MODEL_REGISTRY and not os.listdir(candidate_dir)
+        ):
             candidate_dir = MODEL_REGISTRY
 
         # if ticker subdir exists, prefer latest timestamped run directory
         ticker_base = os.path.join(MODEL_REGISTRY, t)
         if os.path.isdir(ticker_base):
-            runs = [d for d in os.listdir(ticker_base) if os.path.isdir(os.path.join(ticker_base, d))]
+            runs = [
+                d
+                for d in os.listdir(ticker_base)
+                if os.path.isdir(os.path.join(ticker_base, d))
+            ]
             if runs:
                 latest = sorted(runs)[-1]
                 candidate_dir = os.path.join(ticker_base, latest)
@@ -160,7 +178,7 @@ def _collect_artifacts(ticker: str | None = None, run_dir: str | None = None):
         files = []
 
     def _human_size(n: int) -> str:
-        for unit in ['B','KB','MB','GB','TB']:
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
             if n < 1024.0:
                 return f"{n:3.1f} {unit}"
             n /= 1024.0
@@ -168,10 +186,16 @@ def _collect_artifacts(ticker: str | None = None, run_dir: str | None = None):
 
     for fn in files:
         path = os.path.join(candidate_dir, fn)
-        entry = {"name": fn, "path": path, "status": "missing", "detail": None, "kind": None}
+        entry = {
+            "name": fn,
+            "path": path,
+            "status": "missing",
+            "detail": None,
+            "kind": None,
+        }
         if os.path.exists(path):
             entry["status"] = "ready"
-            entry["kind"] = os.path.splitext(fn)[1].lstrip('.').lower()
+            entry["kind"] = os.path.splitext(fn)[1].lstrip(".").lower()
             try:
                 sz = os.path.getsize(path)
                 entry["size_bytes"] = sz
@@ -179,60 +203,70 @@ def _collect_artifacts(ticker: str | None = None, run_dir: str | None = None):
                 entry["detail"] = entry.get("detail") or entry["size_human"]
                 try:
                     entry_stat = os.stat(path)
-                    entry["mtime"] = datetime.datetime.fromtimestamp(entry_stat.st_mtime).isoformat()
+                    entry["mtime"] = datetime.datetime.fromtimestamp(
+                        entry_stat.st_mtime
+                    ).isoformat()
                 except Exception:
                     entry["mtime"] = None
             except Exception:
                 entry["detail"] = None
 
             # JSON metadata: try to load and extract lightweight summary
-            if fn.endswith('.json'):
+            if fn.endswith(".json"):
                 try:
                     j = _load_json(path)
                     if isinstance(j, dict):
                         # add common summary keys
-                        if 'features' in j:
-                            entry['detail'] = f"{len(j.get('features', []))} features"
-                        elif 'feature_order' in j:
-                            entry['detail'] = f"{len(j.get('feature_order', []))} feature dims"
-                        elif 'centers' in j:
-                            entry['detail'] = f"{len(j.get('centers', []))} centers"
-                        elif 'generated_at' in j:
-                            entry['detail'] = f"generated {j.get('generated_at')}"
+                        if "features" in j:
+                            entry["detail"] = f"{len(j.get('features', []))} features"
+                        elif "feature_order" in j:
+                            entry["detail"] = (
+                                f"{len(j.get('feature_order', []))} feature dims"
+                            )
+                        elif "centers" in j:
+                            entry["detail"] = f"{len(j.get('centers', []))} centers"
+                        elif "generated_at" in j:
+                            entry["detail"] = f"generated {j.get('generated_at')}"
                         else:
                             # fallback to listing top-level keys
-                            entry['detail'] = 'keys: ' + ','.join(list(j.keys())[:5])
+                            entry["detail"] = "keys: " + ",".join(list(j.keys())[:5])
                     else:
-                        entry['detail'] = 'json'
+                        entry["detail"] = "json"
                 except Exception:
-                    entry['detail'] = 'json (invalid)'
+                    entry["detail"] = "json (invalid)"
 
             # numpy arrays: report shape when possible
-            if fn.endswith('.npy'):
+            if fn.endswith(".npy"):
                 try:
                     # load in mmap mode to avoid memory pressure
-                    arr = np.load(path, mmap_mode='r')
-                    entry['npy_shape'] = getattr(arr, 'shape', None)
-                    entry['npy_dtype'] = str(getattr(arr, 'dtype', None))
-                    entry['detail'] = f"shape {entry['npy_shape']} dtype {entry['npy_dtype']}"
+                    arr = np.load(path, mmap_mode="r")
+                    entry["npy_shape"] = getattr(arr, "shape", None)
+                    entry["npy_dtype"] = str(getattr(arr, "dtype", None))
+                    entry["detail"] = (
+                        f"shape {entry['npy_shape']} dtype {entry['npy_dtype']}"
+                    )
                     # small summary: min/max on first axis sample if large
                     try:
-                        if getattr(arr, 'size', 0) and arr.size <= 2000000:
+                        if getattr(arr, "size", 0) and arr.size <= 2000000:
                             a = np.array(arr)
-                            entry['npy_min'] = float(a.min()) if a.size else None
-                            entry['npy_max'] = float(a.max()) if a.size else None
+                            entry["npy_min"] = float(a.min()) if a.size else None
+                            entry["npy_max"] = float(a.max()) if a.size else None
                         else:
                             # sample first 100 rows/elements if possible
                             s = arr.flat[:100]
-                            entry['npy_sample_min'] = float(min(s)) if hasattr(s, '__iter__') else None
-                            entry['npy_sample_max'] = float(max(s)) if hasattr(s, '__iter__') else None
+                            entry["npy_sample_min"] = (
+                                float(min(s)) if hasattr(s, "__iter__") else None
+                            )
+                            entry["npy_sample_max"] = (
+                                float(max(s)) if hasattr(s, "__iter__") else None
+                            )
                     except Exception:
                         pass
                 except Exception:
                     pass
 
             # model binary formats: show filename and size
-            if fn.endswith('.ubj') or fn.endswith('.bin') or fn.endswith('.model'):
+            if fn.endswith(".ubj") or fn.endswith(".bin") or fn.endswith(".model"):
                 # keep size already set
                 pass
 
@@ -241,11 +275,14 @@ def _collect_artifacts(ticker: str | None = None, run_dir: str | None = None):
     # Also include known artifact paths (legacy locations) that may not be in the latest run dir
     extras = []
     # common known files to check at registry root
-    known = [xgb_meta_path, xgb_model_path,]
+    known = [
+        xgb_meta_path,
+        xgb_model_path,
+    ]
     for p in known:
         if p and os.path.exists(p):
             bn = os.path.basename(p)
-            if not any(it.get('name') == bn for it in items):
+            if not any(it.get("name") == bn for it in items):
                 try:
                     st = os.stat(p)
                     mtime_iso = datetime.datetime.fromtimestamp(st.st_mtime).isoformat()
@@ -253,16 +290,18 @@ def _collect_artifacts(ticker: str | None = None, run_dir: str | None = None):
                 except Exception:
                     mtime_iso = None
                     sz = 0
-                extras.append({
-                    "name": bn,
-                    "path": p,
-                    "status": "ready",
-                    "detail": f"{round(sz/1024,1)} KB",
-                    "kind": os.path.splitext(bn)[1].lstrip('.'),
-                    "size_bytes": sz,
-                    "size_human": _human_size(sz),
-                    "mtime": mtime_iso,
-                })
+                extras.append(
+                    {
+                        "name": bn,
+                        "path": p,
+                        "status": "ready",
+                        "detail": f"{round(sz/1024,1)} KB",
+                        "kind": os.path.splitext(bn)[1].lstrip("."),
+                        "size_bytes": sz,
+                        "size_human": _human_size(sz),
+                        "mtime": mtime_iso,
+                    }
+                )
 
     return items + extras
 
@@ -275,58 +314,108 @@ def _collect_models_for_run(ticker: str | None = None, run_dir: str | None = Non
     xgb_model_path, xgb_meta_path = xgb_paths(t, run_dir=run_dir)
     if os.path.exists(xgb_meta_path):
         jm = _load_json(xgb_meta_path) or {}
-        summaries.append({
-            "name": "XGB Regressor",
-            "type": "xgb",
-            "present": True,
-            "meta": jm,
-            "info": f"features={len(jm.get('features', []))}" if isinstance(jm, dict) and jm.get('features') else "meta"
-        })
+        summaries.append(
+            {
+                "name": "XGB Regressor",
+                "type": "xgb",
+                "present": True,
+                "meta": jm,
+                "info": (
+                    f"features={len(jm.get('features', []))}"
+                    if isinstance(jm, dict) and jm.get("features")
+                    else "meta"
+                ),
+            }
+        )
     # xgb classifier
     xgbc_model_path, xgbc_meta_path = xgb_classifier_paths(t, run_dir=run_dir)
     if os.path.exists(xgbc_meta_path):
         jm = _load_json(xgbc_meta_path) or {}
-        summaries.append({
-            "name": "XGB Classifier",
-            "type": "xgb_classifier",
-            "present": True,
-            "meta": jm,
-            "info": f"features={len(jm.get('features', []))}" if isinstance(jm, dict) and jm.get('features') else "meta"
-        })
+        summaries.append(
+            {
+                "name": "XGB Classifier",
+                "type": "xgb_classifier",
+                "present": True,
+                "meta": jm,
+                "info": (
+                    f"features={len(jm.get('features', []))}"
+                    if isinstance(jm, dict) and jm.get("features")
+                    else "meta"
+                ),
+            }
+        )
     # pca
     pca_meta_path, _ = pca_paths(t, run_dir=run_dir)
     if os.path.exists(pca_meta_path):
         jm = _load_json(pca_meta_path) or {}
         info = None
         if isinstance(jm, dict):
-            if jm.get('components'):
+            if jm.get("components"):
                 info = f"components={len(jm.get('components', []))}"
-            elif jm.get('explained_variance'):
+            elif jm.get("explained_variance"):
                 info = f"explained={jm.get('explained_variance')[:3]}"
-        summaries.append({"name": "PCA", "type": "pca", "present": True, "meta": jm, "info": info or 'meta'})
+        summaries.append(
+            {
+                "name": "PCA",
+                "type": "pca",
+                "present": True,
+                "meta": jm,
+                "info": info or "meta",
+            }
+        )
     # clustering
     cluster_meta_path, _ = cluster_paths(t, run_dir=run_dir)
     if os.path.exists(cluster_meta_path):
         jm = _load_json(cluster_meta_path) or {}
-        info = f"centers={len(jm.get('centers', []))}" if isinstance(jm, dict) and jm.get('centers') else 'meta'
-        summaries.append({"name": "Clustering", "type": "clustering", "present": True, "meta": jm, "info": info})
+        info = (
+            f"centers={len(jm.get('centers', []))}"
+            if isinstance(jm, dict) and jm.get("centers")
+            else "meta"
+        )
+        summaries.append(
+            {
+                "name": "Clustering",
+                "type": "clustering",
+                "present": True,
+                "meta": jm,
+                "info": info,
+            }
+        )
     # forecast
     forecast_meta_path = forecast_path(t, run_dir=run_dir)
     if os.path.exists(forecast_meta_path):
         jm = _load_json(forecast_meta_path) or {}
-        info = 'forecast' if jm else 'meta'
-        summaries.append({"name": "Forecast", "type": "forecast", "present": True, "meta": jm, "info": info})
+        info = "forecast" if jm else "meta"
+        summaries.append(
+            {
+                "name": "Forecast",
+                "type": "forecast",
+                "present": True,
+                "meta": jm,
+                "info": info,
+            }
+        )
     # association
     assoc_meta_path = association_path(t, run_dir=run_dir)
     if os.path.exists(assoc_meta_path):
         jm = _load_json(assoc_meta_path) or {}
-        info = 'rules' if jm else 'meta'
-        summaries.append({"name": "Association Rules", "type": "association", "present": True, "meta": jm, "info": info})
+        info = "rules" if jm else "meta"
+        summaries.append(
+            {
+                "name": "Association Rules",
+                "type": "association",
+                "present": True,
+                "meta": jm,
+                "info": info,
+            }
+        )
 
     return summaries
 
+
 class PredictRequest(BaseModel):
     features: list
+
 
 @router.get("/health")
 def health(request: Request):
@@ -351,8 +440,14 @@ def health(request: Request):
         )
     return payload
 
+
 @router.get("/model-info")
-def model_info(request: Request, ticker: str = Query("AAPL"), raw: str | None = Query(None), run: str | None = Query(None)):
+def model_info(
+    request: Request,
+    ticker: str = Query("AAPL"),
+    raw: str | None = Query(None),
+    run: str | None = Query(None),
+):
     # if ticker == 'ALL' render a registry-wide overview
     t = _safe_ticker(ticker)
     xgb_model_path, xgb_meta_path = xgb_paths(t)
@@ -372,7 +467,13 @@ def model_info(request: Request, ticker: str = Query("AAPL"), raw: str | None = 
     runs_data = []
     ticker_base = os.path.join(MODEL_REGISTRY, t)
     if os.path.isdir(ticker_base):
-        runs = sorted([d for d in os.listdir(ticker_base) if os.path.isdir(os.path.join(ticker_base, d))])
+        runs = sorted(
+            [
+                d
+                for d in os.listdir(ticker_base)
+                if os.path.isdir(os.path.join(ticker_base, d))
+            ]
+        )
         for r in runs:
             rd = os.path.join(ticker_base, r)
             try:
@@ -391,9 +492,21 @@ def model_info(request: Request, ticker: str = Query("AAPL"), raw: str | None = 
     if ticker and str(ticker).upper() in ("ALL", "*"):
         registry_overview = []
         try:
-            for tk in sorted([d for d in os.listdir(MODEL_REGISTRY) if os.path.isdir(os.path.join(MODEL_REGISTRY, d))]):
+            for tk in sorted(
+                [
+                    d
+                    for d in os.listdir(MODEL_REGISTRY)
+                    if os.path.isdir(os.path.join(MODEL_REGISTRY, d))
+                ]
+            ):
                 tbase = os.path.join(MODEL_REGISTRY, tk)
-                truns = sorted([d for d in os.listdir(tbase) if os.path.isdir(os.path.join(tbase, d))])
+                truns = sorted(
+                    [
+                        d
+                        for d in os.listdir(tbase)
+                        if os.path.isdir(os.path.join(tbase, d))
+                    ]
+                )
                 ticker_entry = {"ticker": tk, "runs": []}
                 for r in truns:
                     rd = os.path.join(tbase, r)
@@ -405,7 +518,9 @@ def model_info(request: Request, ticker: str = Query("AAPL"), raw: str | None = 
                         models = _collect_models_for_run(tk, run_dir=rd)
                     except Exception:
                         models = []
-                    ticker_entry["runs"].append({"run": r, "path": rd, "artifacts": art, "models": models})
+                    ticker_entry["runs"].append(
+                        {"run": r, "path": rd, "artifacts": art, "models": models}
+                    )
                 registry_overview.append(ticker_entry)
         except Exception:
             registry_overview = registry_overview or []
@@ -419,10 +534,16 @@ def model_info(request: Request, ticker: str = Query("AAPL"), raw: str | None = 
             target = os.path.join(candidate_dir, safe_name)
         else:
             # determine candidate run dir (reuse similar logic from _collect_artifacts)
-            candidate_dir = os.path.dirname(xgb_meta_path) if xgb_meta_path else MODEL_REGISTRY
+            candidate_dir = (
+                os.path.dirname(xgb_meta_path) if xgb_meta_path else MODEL_REGISTRY
+            )
             ticker_base = os.path.join(MODEL_REGISTRY, t)
             if os.path.isdir(ticker_base):
-                runs = [d for d in os.listdir(ticker_base) if os.path.isdir(os.path.join(ticker_base, d))]
+                runs = [
+                    d
+                    for d in os.listdir(ticker_base)
+                    if os.path.isdir(os.path.join(ticker_base, d))
+                ]
                 if runs:
                     latest = sorted(runs)[-1]
                     candidate_dir = os.path.join(ticker_base, latest)
@@ -437,22 +558,30 @@ def model_info(request: Request, ticker: str = Query("AAPL"), raw: str | None = 
         info = {}
         try:
             st = os.stat(target)
-            info['size_bytes'] = st.st_size
-            info['mtime'] = datetime.datetime.fromtimestamp(st.st_mtime).isoformat()
+            info["size_bytes"] = st.st_size
+            info["mtime"] = datetime.datetime.fromtimestamp(st.st_mtime).isoformat()
         except Exception:
             pass
 
-        if target.endswith('.json'):
+        if target.endswith(".json"):
             content = _load_json(target)
             return {"meta": info, "content": _sanitize_for_json(content)}
-        if target.endswith('.npy'):
+        if target.endswith(".npy"):
             try:
-                arr = np.load(target, mmap_mode='r')
-                out = {"shape": getattr(arr, 'shape', None), "dtype": str(getattr(arr, 'dtype', None))}
+                arr = np.load(target, mmap_mode="r")
+                out = {
+                    "shape": getattr(arr, "shape", None),
+                    "dtype": str(getattr(arr, "dtype", None)),
+                }
                 # attempt small sample summary
                 try:
                     sample = np.array(arr.flat[:200])
-                    out.update({"sample_min": float(sample.min()), "sample_max": float(sample.max())})
+                    out.update(
+                        {
+                            "sample_min": float(sample.min()),
+                            "sample_max": float(sample.max()),
+                        }
+                    )
                 except Exception:
                     pass
                 return {"meta": info, "content": _sanitize_for_json(out)}
@@ -481,7 +610,13 @@ def model_info(request: Request, ticker: str = Query("AAPL"), raw: str | None = 
         # build registry tickers list for dropdown selector
         registry_tickers = []
         try:
-            registry_tickers = sorted([d for d in os.listdir(MODEL_REGISTRY) if os.path.isdir(os.path.join(MODEL_REGISTRY, d))])
+            registry_tickers = sorted(
+                [
+                    d
+                    for d in os.listdir(MODEL_REGISTRY)
+                    if os.path.isdir(os.path.join(MODEL_REGISTRY, d))
+                ]
+            )
         except Exception:
             registry_tickers = []
 
@@ -530,13 +665,17 @@ def cluster_samples(
     except Exception:
         raise HTTPException(status_code=500, detail="Could not load cluster labels")
 
-    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    feat_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
+    )
     if not os.path.exists(feat_path):
         raise HTTPException(status_code=404, detail="Feature file not found for ticker")
     try:
         df = pd.read_parquet(feat_path)
     except Exception:
-        raise HTTPException(status_code=500, detail="Could not read feature parquet for ticker")
+        raise HTTPException(
+            status_code=500, detail="Could not read feature parquet for ticker"
+        )
 
     # normalize date column and apply optional date range filtering (since/until are YYYY-MM-DD)
     if "date" in df.columns:
@@ -568,16 +707,26 @@ def cluster_samples(
             if "date" in df.columns:
                 df = df.copy()
                 df["__date_str"] = df["date"].astype(str)
-                labels_df = pd.DataFrame({"__date_str": [str(x) for x in row_index], "cluster_label": labels})
-                df_used = pd.merge(df, labels_df, on="__date_str", how="inner").drop(columns=["__date_str"])\
+                labels_df = pd.DataFrame(
+                    {"__date_str": [str(x) for x in row_index], "cluster_label": labels}
+                )
+                df_used = (
+                    pd.merge(df, labels_df, on="__date_str", how="inner")
+                    .drop(columns=["__date_str"])
                     .reset_index(drop=True)
+                )
             else:
                 # fallback: match on original index string values
                 df_idx = df.reset_index()
                 df_idx["__idx_str"] = df_idx["index"].astype(str)
-                labels_df = pd.DataFrame({"__idx_str": [str(x) for x in row_index], "cluster_label": labels})
-                df_used = pd.merge(df_idx, labels_df, on="__idx_str", how="inner").drop(columns=["__idx_str", "index"])\
+                labels_df = pd.DataFrame(
+                    {"__idx_str": [str(x) for x in row_index], "cluster_label": labels}
+                )
+                df_used = (
+                    pd.merge(df_idx, labels_df, on="__idx_str", how="inner")
+                    .drop(columns=["__idx_str", "index"])
                     .reset_index(drop=True)
+                )
         except Exception:
             df_used = None
 
@@ -594,7 +743,9 @@ def cluster_samples(
     try:
         if "date" in df_used.columns:
             df_used["date"] = pd.to_datetime(df_used["date"], errors="coerce")
-            df_used = df_used.sort_values("date", ascending=False).reset_index(drop=True)
+            df_used = df_used.sort_values("date", ascending=False).reset_index(
+                drop=True
+            )
         else:
             df_used = df_used.sort_index(ascending=False).reset_index(drop=True)
     except Exception:
@@ -609,7 +760,9 @@ def cluster_samples(
 
     # include the cluster metadata (centers, feature_order, scaler params) so front-end
     # visualizations (heatmap / violin) can render without an extra request
-    resp_meta = _sanitize_for_json(meta.copy() if isinstance(meta, dict) else meta) or {}
+    resp_meta = (
+        _sanitize_for_json(meta.copy() if isinstance(meta, dict) else meta) or {}
+    )
     resp_meta["n_clusters"] = n_clusters
 
     return {"ticker": t, "meta": resp_meta, "samples": out}
@@ -630,13 +783,17 @@ def label_dataset(ticker: str = Query("AAPL")):
     except Exception:
         raise HTTPException(status_code=500, detail="Could not load cluster labels")
 
-    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    feat_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
+    )
     if not os.path.exists(feat_path):
         raise HTTPException(status_code=404, detail="Feature file not found for ticker")
     try:
         df = pd.read_parquet(feat_path)
     except Exception:
-        raise HTTPException(status_code=500, detail="Could not read feature parquet for ticker")
+        raise HTTPException(
+            status_code=500, detail="Could not read feature parquet for ticker"
+        )
 
     minlen = min(len(labels), len(df))
     if minlen == 0:
@@ -649,13 +806,31 @@ def label_dataset(ticker: str = Query("AAPL")):
         try:
             if "date" in df.columns:
                 df["date_str_for_label"] = df["date"].astype(str)
-                labels_df = pd.DataFrame({"date_str_for_label": [str(x) for x in row_index], "cluster_label": labels})
-                df_to_label = pd.merge(df, labels_df, on="date_str_for_label", how="inner").drop(columns=["date_str_for_label"]).reset_index(drop=True)
+                labels_df = pd.DataFrame(
+                    {
+                        "date_str_for_label": [str(x) for x in row_index],
+                        "cluster_label": labels,
+                    }
+                )
+                df_to_label = (
+                    pd.merge(df, labels_df, on="date_str_for_label", how="inner")
+                    .drop(columns=["date_str_for_label"])
+                    .reset_index(drop=True)
+                )
             else:
                 df_idx = df.reset_index()
                 df_idx["idx_str_for_label"] = df_idx["index"].astype(str)
-                labels_df = pd.DataFrame({"idx_str_for_label": [str(x) for x in row_index], "cluster_label": labels})
-                df_to_label = pd.merge(df_idx, labels_df, on="idx_str_for_label", how="inner").drop(columns=["idx_str_for_label", "index"]).reset_index(drop=True)
+                labels_df = pd.DataFrame(
+                    {
+                        "idx_str_for_label": [str(x) for x in row_index],
+                        "cluster_label": labels,
+                    }
+                )
+                df_to_label = (
+                    pd.merge(df_idx, labels_df, on="idx_str_for_label", how="inner")
+                    .drop(columns=["idx_str_for_label", "index"])
+                    .reset_index(drop=True)
+                )
         except Exception:
             df_to_label = df.tail(minlen).reset_index(drop=True).copy()
             df_to_label["cluster_label"] = labels[-minlen:]
@@ -680,7 +855,9 @@ def label_dataset(ticker: str = Query("AAPL")):
             df_to_label.to_csv(out_csv, index=False)
             saved = out_csv
         except Exception:
-            raise HTTPException(status_code=500, detail="Failed to save labeled dataset")
+            raise HTTPException(
+                status_code=500, detail="Failed to save labeled dataset"
+            )
 
     return {"status": "ok", "saved_path": saved}
 
@@ -703,11 +880,19 @@ def cluster_interpret(ticker: str = Query("AAPL")):
         raise HTTPException(status_code=400, detail="Cluster metadata incomplete")
 
     # Try to convert centers from scaled space back to original units when scaler params exist
-    scaler_mean = np.array(meta.get("scaler_mean", []) if meta.get("scaler_mean") is not None else [])
-    scaler_scale = np.array(meta.get("scaler_scale", []) if meta.get("scaler_scale") is not None else [])
+    scaler_mean = np.array(
+        meta.get("scaler_mean", []) if meta.get("scaler_mean") is not None else []
+    )
+    scaler_scale = np.array(
+        meta.get("scaler_scale", []) if meta.get("scaler_scale") is not None else []
+    )
     use_orig = False
     centers_orig = centers.copy()
-    if scaler_mean.size and scaler_scale.size and centers.shape[1] == scaler_mean.size == scaler_scale.size:
+    if (
+        scaler_mean.size
+        and scaler_scale.size
+        and centers.shape[1] == scaler_mean.size == scaler_scale.size
+    ):
         try:
             centers_orig = centers * scaler_scale + scaler_mean
             use_orig = True
@@ -737,7 +922,9 @@ def cluster_interpret(ticker: str = Query("AAPL")):
         def finfo(name):
             if name not in feat_vals:
                 return None, None
-            return float(feat_vals[name]["vals"][idx]), float(feat_vals[name]["ranks"][idx])
+            return float(feat_vals[name]["vals"][idx]), float(
+                feat_vals[name]["ranks"][idx]
+            )
 
         # Heuristic thresholds (percentiles)
         high_thr = 0.66
@@ -750,10 +937,14 @@ def cluster_interpret(ticker: str = Query("AAPL")):
                 continue
             if p >= high_thr:
                 label_parts.append("Positive Return")
-                reasons.append(f"{ret_name} p{p:.2f} val={v:.4g}{' (orig)' if use_orig else ''}")
+                reasons.append(
+                    f"{ret_name} p{p:.2f} val={v:.4g}{' (orig)' if use_orig else ''}"
+                )
             elif p <= low_thr:
                 label_parts.append("Negative Return")
-                reasons.append(f"{ret_name} p{p:.2f} val={v:.4g}{' (orig)' if use_orig else ''}")
+                reasons.append(
+                    f"{ret_name} p{p:.2f} val={v:.4g}{' (orig)' if use_orig else ''}"
+                )
             break
 
         # Volatility
@@ -787,11 +978,19 @@ def cluster_interpret(ticker: str = Query("AAPL")):
                 reasons.append(f"macd p{p:.2f} val={v:.4g}")
 
         # Select top features by absolute deviation from median across centers (original units if available)
-        top_idxs = np.argsort(np.abs(centers_orig[:, :] - np.median(centers_orig, axis=0))[idx, :])[::-1][:4]
+        top_idxs = np.argsort(
+            np.abs(centers_orig[:, :] - np.median(centers_orig, axis=0))[idx, :]
+        )[::-1][:4]
         top_feats = []
         for j in top_idxs:
             if j < len(feat_order):
-                top_feats.append({"feature": feat_order[j], "value": float(centers_orig[idx, j]), "percentile": float(feat_vals[feat_order[j]]["ranks"][idx])})
+                top_feats.append(
+                    {
+                        "feature": feat_order[j],
+                        "value": float(centers_orig[idx, j]),
+                        "percentile": float(feat_vals[feat_order[j]]["ranks"][idx]),
+                    }
+                )
 
         if not label_parts:
             label = "Neutral"
@@ -803,9 +1002,18 @@ def cluster_interpret(ticker: str = Query("AAPL")):
                     seen.append(part)
             label = " + ".join(seen)
 
-        interpretations[str(idx)] = {"label": label, "reason": reasons, "top_features": top_feats}
+        interpretations[str(idx)] = {
+            "label": label,
+            "reason": reasons,
+            "top_features": top_feats,
+        }
 
-    return {"ticker": t, "interpretations": interpretations, "units": ("original" if use_orig else "scaled")}
+    return {
+        "ticker": t,
+        "interpretations": interpretations,
+        "units": ("original" if use_orig else "scaled"),
+    }
+
 
 @router.get("/expected-features")
 def expected_features(ticker: str = Query("AAPL")):
@@ -819,6 +1027,7 @@ def expected_features(ticker: str = Query("AAPL")):
     feats = [f[0] if isinstance(f, (list, tuple)) else f for f in raw_feats]
     return {"features": feats}
 
+
 @router.get("/expected-features-class")
 def expected_features_class(ticker: str = Query("AAPL")):
     t = _safe_ticker(ticker)
@@ -830,6 +1039,7 @@ def expected_features_class(ticker: str = Query("AAPL")):
     feats = [str(f) for f in meta.get("features", [])]
     return {"features": feats}
 
+
 @router.get("/pca-info")
 def pca_info(ticker: str = Query("AAPL")):
     t = _safe_ticker(ticker)
@@ -838,6 +1048,7 @@ def pca_info(ticker: str = Query("AAPL")):
         raise HTTPException(status_code=404, detail="PCA metadata not found")
     with open(meta_path, "r") as f:
         return json.load(f)
+
 
 @router.get("/cluster-info")
 def cluster_info(ticker: str = Query("AAPL")):
@@ -858,7 +1069,9 @@ def cluster_info(ticker: str = Query("AAPL")):
             meta["latest_label"] = None
 
     # diagnostic: how many feature rows exist and how many were used for training
-    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    feat_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
+    )
     features_count = None
     try:
         if os.path.exists(feat_path):
@@ -881,6 +1094,7 @@ def cluster_info(ticker: str = Query("AAPL")):
     meta["training_count"] = training_count
     return meta
 
+
 @router.post("/predict-cluster")
 def predict_cluster(req: PredictRequest, ticker: str = Query("AAPL")):
     t = _safe_ticker(ticker)
@@ -892,11 +1106,19 @@ def predict_cluster(req: PredictRequest, ticker: str = Query("AAPL")):
     centers = np.array(meta.get("centers", []), dtype=float)
     feat_order = meta.get("feature_order", [])
     if len(req.features) != len(feat_order):
-        raise HTTPException(status_code=400, detail=f"Expected {len(feat_order)} features, got {len(req.features)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Expected {len(feat_order)} features, got {len(req.features)}",
+        )
     x = np.array(req.features, dtype=float)
     mean = meta.get("scaler_mean")
     scale = meta.get("scaler_scale")
-    if isinstance(mean, list) and isinstance(scale, list) and len(mean) == len(x) and len(scale) == len(x):
+    if (
+        isinstance(mean, list)
+        and isinstance(scale, list)
+        and len(mean) == len(x)
+        and len(scale) == len(x)
+    ):
         mean_arr = np.array(mean, dtype=float)
         scale_arr = np.array(scale, dtype=float)
         scale_arr[scale_arr == 0] = 1.0
@@ -905,30 +1127,43 @@ def predict_cluster(req: PredictRequest, ticker: str = Query("AAPL")):
     assigned = int(np.argmin(dists))
     return {"cluster": assigned, "distances": dists.tolist()}
 
+
 @router.post("/predict")
 def predict(req: PredictRequest, ticker: str = Query("AAPL")):
     booster, feat_names = load_xgb(_safe_ticker(ticker))
     if booster is None or not feat_names:
-        raise HTTPException(status_code=400, detail="XGB model not available. Train it first.")
+        raise HTTPException(
+            status_code=400, detail="XGB model not available. Train it first."
+        )
     if len(req.features) != len(feat_names):
-        raise HTTPException(status_code=400, detail=f"Expected {len(feat_names)} features, got {len(req.features)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Expected {len(feat_names)} features, got {len(req.features)}",
+        )
     df = pd.DataFrame([req.features], columns=[f.strip() for f in feat_names])
     dmatrix = xgb.DMatrix(df)
     pred = float(booster.predict(dmatrix)[0])
     return {"model": "xgb", "prediction": pred}
 
+
 @router.post("/predict-class")
 def predict_class(req: PredictRequest, ticker: str = Query("AAPL")):
     booster, feat_names = load_xgb_classifier(_safe_ticker(ticker))
     if booster is None or not feat_names:
-        raise HTTPException(status_code=400, detail="Classifier not available. Train it first.")
+        raise HTTPException(
+            status_code=400, detail="Classifier not available. Train it first."
+        )
     if len(req.features) != len(feat_names):
-        raise HTTPException(status_code=400, detail=f"Expected {len(feat_names)} features, got {len(req.features)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Expected {len(feat_names)} features, got {len(req.features)}",
+        )
     df = pd.DataFrame([req.features], columns=[f.strip() for f in feat_names])
     dmatrix = xgb.DMatrix(df)
     proba = float(booster.predict(dmatrix)[0])
     label = int(proba >= 0.5)
     return {"model": "xgb_classifier", "proba_up": proba, "label": label}
+
 
 @router.post("/upload-csv")
 async def upload_csv(file: UploadFile = File(...)):
@@ -936,21 +1171,31 @@ async def upload_csv(file: UploadFile = File(...)):
     size_kb = round(len(content) / 1024, 2)
     return {"status": "ok", "size_kb": size_kb}
 
+
 @router.post("/predict-batch")
 async def predict_batch(ticker: str = Form("AAPL")):
     # Predict using the pipeline-ingested features for the given ticker
     t = _safe_ticker(ticker)
     booster, feat_names = load_xgb(t)
     if booster is None or not feat_names:
-        raise HTTPException(status_code=400, detail="XGB model not available. Train it first.")
+        raise HTTPException(
+            status_code=400, detail="XGB model not available. Train it first."
+        )
 
-    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    feat_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
+    )
     if not os.path.exists(feat_path):
-        raise HTTPException(status_code=404, detail=f"Feature file missing for {t}. Run the pipeline first.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Feature file missing for {t}. Run the pipeline first.",
+        )
     try:
         df = pd.read_parquet(feat_path)
     except Exception:
-        raise HTTPException(status_code=500, detail="Could not read feature parquet for ticker")
+        raise HTTPException(
+            status_code=500, detail="Could not read feature parquet for ticker"
+        )
 
     # Keep only numeric columns for alignment; align_to_booster_features will validate required columns
     try:
@@ -959,35 +1204,50 @@ async def predict_batch(ticker: str = Form("AAPL")):
         # propagate missing-features error
         raise e
     except Exception:
-        raise HTTPException(status_code=500, detail="Failed to align features for prediction")
+        raise HTTPException(
+            status_code=500, detail="Failed to align features for prediction"
+        )
 
     dmatrix = xgb.DMatrix(df_aligned)
     preds = booster.predict(dmatrix)
     return {"count": int(len(preds)), "predictions": preds.tolist()}
+
 
 @router.get("/forecast")
 def forecast(ticker: str = Query("AAPL")):
     t = _safe_ticker(ticker)
     forecast_meta_path = forecast_path(t)
     if not os.path.exists(forecast_meta_path):
-        raise HTTPException(status_code=404, detail="Forecast not found. Run the pipeline to generate it.")
+        raise HTTPException(
+            status_code=404,
+            detail="Forecast not found. Run the pipeline to generate it.",
+        )
     with open(forecast_meta_path, "r") as f:
         return json.load(f)
 
+
 @router.get("/recommend")
-def recommend(date: str | None = Query(None), k: int = Query(5, gt=0, le=50), ticker: str = Query("AAPL")):
+def recommend(
+    date: str | None = Query(None),
+    k: int = Query(5, gt=0, le=50),
+    ticker: str = Query("AAPL"),
+):
     t = _safe_ticker(ticker)
     pca_meta_path, pca_trans_path = pca_paths(t)
     if not os.path.exists(pca_meta_path):
         raise HTTPException(status_code=404, detail="PCA metadata not found")
     if not os.path.exists(pca_trans_path):
-        raise HTTPException(status_code=404, detail="PCA transformed matrix not found. Run pipeline.")
+        raise HTTPException(
+            status_code=404, detail="PCA transformed matrix not found. Run pipeline."
+        )
     with open(pca_meta_path, "r") as f:
         meta = json.load(f)
     comps = np.load(pca_trans_path)
     row_index = meta.get("row_index", [])
     if not row_index or len(row_index) != len(comps):
-        raise HTTPException(status_code=500, detail="Row index missing or misaligned in PCA metadata")
+        raise HTTPException(
+            status_code=500, detail="Row index missing or misaligned in PCA metadata"
+        )
     if date and date in row_index:
         idx = row_index.index(date)
     else:
@@ -997,7 +1257,9 @@ def recommend(date: str | None = Query(None), k: int = Query(5, gt=0, le=50), ti
     dists = np.linalg.norm(comps - target, axis=1)
     dists[idx] = np.inf
     nn_idx = np.argsort(dists)[:k]
-    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    feat_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
+    )
     closes = {}
     next_returns_map = {}
     if os.path.exists(feat_path):
@@ -1007,8 +1269,12 @@ def recommend(date: str | None = Query(None), k: int = Query(5, gt=0, le=50), ti
             fdf["Close"] = pd.to_numeric(fdf["Close"], errors="coerce")
             fdf["next_close"] = fdf["Close"].shift(-1)
             fdf["next_return"] = (fdf["next_close"] - fdf["Close"]) / fdf["Close"]
-            closes = dict(zip(fdf["date"], fdf.get("Close", pd.Series([None] * len(fdf)))))
-            next_returns_map = dict(zip(fdf["date"], fdf.get("next_return", pd.Series([None] * len(fdf)))))
+            closes = dict(
+                zip(fdf["date"], fdf.get("Close", pd.Series([None] * len(fdf))))
+            )
+            next_returns_map = dict(
+                zip(fdf["date"], fdf.get("next_return", pd.Series([None] * len(fdf))))
+            )
         else:
             closes = dict(zip(fdf["date"], pd.Series([None] * len(fdf))))
 
@@ -1023,8 +1289,14 @@ def recommend(date: str | None = Query(None), k: int = Query(5, gt=0, le=50), ti
         nr = None
         if next_returns_map:
             v = next_returns_map.get(dt)
-            nr = None if v is None or (isinstance(v, float) and (np.isnan(v))) else float(v)
-        neighbors.append({"date": dt, "distance": d, "close": close_val, "next_return": nr})
+            nr = (
+                None
+                if v is None or (isinstance(v, float) and (np.isnan(v)))
+                else float(v)
+            )
+        neighbors.append(
+            {"date": dt, "distance": d, "close": close_val, "next_return": nr}
+        )
 
     # summary stats for neighbors' next-day returns
     nr_vals = [n["next_return"] for n in neighbors if n.get("next_return") is not None]
@@ -1035,35 +1307,56 @@ def recommend(date: str | None = Query(None), k: int = Query(5, gt=0, le=50), ti
     else:
         avg_nr = med_nr = std_nr = None
 
-    return {"target_date": date, "k": k, "neighbors": neighbors, "avg_next_return": avg_nr, "median_next_return": med_nr, "std_next_return": std_nr}
+    return {
+        "target_date": date,
+        "k": k,
+        "neighbors": neighbors,
+        "avg_next_return": avg_nr,
+        "median_next_return": med_nr,
+        "std_next_return": std_nr,
+    }
+
 
 @router.post("/recommend")
-def recommend_from_features(req: PredictRequest, k: int = Query(5, gt=0, le=50), ticker: str = Query("AAPL")):
+def recommend_from_features(
+    req: PredictRequest, k: int = Query(5, gt=0, le=50), ticker: str = Query("AAPL")
+):
     t = _safe_ticker(ticker)
     pca_meta_path, pca_trans_path = pca_paths(t)
     if not os.path.exists(pca_meta_path):
         raise HTTPException(status_code=404, detail="PCA metadata not found")
     if not os.path.exists(pca_trans_path):
-        raise HTTPException(status_code=404, detail="PCA transformed matrix not found. Run pipeline.")
+        raise HTTPException(
+            status_code=404, detail="PCA transformed matrix not found. Run pipeline."
+        )
     with open(pca_meta_path, "r") as f:
         meta = json.load(f)
     feat_order = meta.get("feature_order", [])
     mean = np.array(meta.get("mean", []), dtype=float)
     components = np.array(meta.get("components", []), dtype=float)
     if not feat_order or len(req.features) != len(feat_order):
-        raise HTTPException(status_code=400, detail=f"Expected {len(feat_order)} features in PCA feature order")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Expected {len(feat_order)} features in PCA feature order",
+        )
     if mean.size != len(feat_order) or components.shape[1] != len(feat_order):
-        raise HTTPException(status_code=500, detail="PCA metadata incomplete (mean/components)")
+        raise HTTPException(
+            status_code=500, detail="PCA metadata incomplete (mean/components)"
+        )
     x = np.array(req.features, dtype=float)
     z = np.dot(x - mean, components.T)
     comps = np.load(pca_trans_path)
     row_index = meta.get("row_index", [])
     if not row_index or len(row_index) != len(comps):
-        raise HTTPException(status_code=500, detail="Row index missing or misaligned in PCA metadata")
+        raise HTTPException(
+            status_code=500, detail="Row index missing or misaligned in PCA metadata"
+        )
     dists = np.linalg.norm(comps - z, axis=1)
     nn_idx = np.argsort(dists)[:k]
 
-    feat_path = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet")
+    feat_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
+    )
     next_returns_map = {}
     closes = {}
     if os.path.exists(feat_path):
@@ -1073,8 +1366,12 @@ def recommend_from_features(req: PredictRequest, k: int = Query(5, gt=0, le=50),
             fdf["Close"] = pd.to_numeric(fdf["Close"], errors="coerce")
             fdf["next_close"] = fdf["Close"].shift(-1)
             fdf["next_return"] = (fdf["next_close"] - fdf["Close"]) / fdf["Close"]
-            next_returns_map = dict(zip(fdf["date"], fdf.get("next_return", pd.Series([None] * len(fdf)))))
-            closes = dict(zip(fdf["date"], fdf.get("Close", pd.Series([None] * len(fdf)))))
+            next_returns_map = dict(
+                zip(fdf["date"], fdf.get("next_return", pd.Series([None] * len(fdf))))
+            )
+            closes = dict(
+                zip(fdf["date"], fdf.get("Close", pd.Series([None] * len(fdf))))
+            )
 
     neighbors = []
     for i in nn_idx:
@@ -1087,8 +1384,14 @@ def recommend_from_features(req: PredictRequest, k: int = Query(5, gt=0, le=50),
         nr = None
         if next_returns_map:
             v = next_returns_map.get(dt)
-            nr = None if v is None or (isinstance(v, float) and (np.isnan(v))) else float(v)
-        neighbors.append({"date": dt, "distance": d, "close": close_val, "next_return": nr})
+            nr = (
+                None
+                if v is None or (isinstance(v, float) and (np.isnan(v)))
+                else float(v)
+            )
+        neighbors.append(
+            {"date": dt, "distance": d, "close": close_val, "next_return": nr}
+        )
 
     nr_vals = [n["next_return"] for n in neighbors if n.get("next_return") is not None]
     if nr_vals:
@@ -1098,13 +1401,22 @@ def recommend_from_features(req: PredictRequest, k: int = Query(5, gt=0, le=50),
     else:
         avg_nr = med_nr = std_nr = None
 
-    return {"k": k, "neighbors": neighbors, "avg_next_return": avg_nr, "median_next_return": med_nr, "std_next_return": std_nr}
+    return {
+        "k": k,
+        "neighbors": neighbors,
+        "avg_next_return": avg_nr,
+        "median_next_return": med_nr,
+        "std_next_return": std_nr,
+    }
+
 
 @router.get("/association-info")
 def association_info(ticker: str = Query("AAPL")):
     path = association_path(_safe_ticker(ticker))
     if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Association rules not found. Run association flow.")
+        raise HTTPException(
+            status_code=404, detail="Association rules not found. Run association flow."
+        )
     with open(path, "r") as f:
         return json.load(f)
 
@@ -1117,7 +1429,11 @@ def artifact_download(raw: str = Query(...), ticker: str = Query("AAPL")):
     candidate_dir = os.path.dirname(xgb_meta_path) if xgb_meta_path else MODEL_REGISTRY
     ticker_base = os.path.join(MODEL_REGISTRY, t)
     if os.path.isdir(ticker_base):
-        runs = [d for d in os.listdir(ticker_base) if os.path.isdir(os.path.join(ticker_base, d))]
+        runs = [
+            d
+            for d in os.listdir(ticker_base)
+            if os.path.isdir(os.path.join(ticker_base, d))
+        ]
         if runs:
             latest = sorted(runs)[-1]
             candidate_dir = os.path.join(ticker_base, latest)
@@ -1130,4 +1446,7 @@ def artifact_download(raw: str = Query(...), ticker: str = Query("AAPL")):
         raise HTTPException(status_code=404, detail="Artifact not found")
 
     from fastapi.responses import FileResponse
-    return FileResponse(path=target, filename=safe_name, media_type='application/octet-stream')
+
+    return FileResponse(
+        path=target, filename=safe_name, media_type="application/octet-stream"
+    )
