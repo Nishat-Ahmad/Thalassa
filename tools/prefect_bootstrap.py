@@ -1,6 +1,5 @@
 import os
 import subprocess
-import sys
 import time
 from typing import List, Optional
 
@@ -33,7 +32,9 @@ def _wait_for_prefect(api_url: str, timeout_s: int = 120) -> None:
             last_err = str(e)
         time.sleep(2)
 
-    raise RuntimeError(f"Prefect API not healthy after {timeout_s}s: {health_url} (last: {last_err})")
+    raise RuntimeError(
+        f"Prefect API not healthy after {timeout_s}s: {health_url} (last: {last_err})"
+    )
 
 
 def _ensure_work_pool(pool: str) -> None:
