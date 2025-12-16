@@ -19,6 +19,26 @@ uvicorn app.main:app --reload --app-dir d:\Code\Finance
 python flows/flow.py  # run ETL + baseline train
 ```
 
+## Docker Compose (Prefect + API, end-to-end)
+
+This repo includes a minimal-but-complete Compose setup that runs:
+- Prefect server (UI/API) on `http://localhost:4200`
+- API on `http://localhost:8000`
+- A Prefect worker bound to a work pool (`thalassa-pool`)
+- A one-shot bootstrap container that registers a scheduled deployment
+
+```bash
+docker compose up --build
+```
+
+To (re)register the scheduled deployment explicitly:
+
+```bash
+docker compose run --rm prefect-init
+```
+
+Artifacts (`ml/registry`, `ml/features`, `ml/data`) are stored in named volumes so the API and worker share the same state.
+
 ## Next Steps
 1. Expand feature engineering & persist metadata
 2. Add XGBoost models (regression/classification)
