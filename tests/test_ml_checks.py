@@ -1,6 +1,7 @@
 import json
 import os
 
+
 def test_registry_files_exist():
     REGISTRY = "ml/registry"  # Assuming REGISTRY is defined like this
     assert os.path.exists(REGISTRY)
