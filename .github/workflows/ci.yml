@@ -43,57 +43,6 @@ jobs:
           python -m pip install pyarrow fastparquet -q
       - name: Set PYTHONPATH
         run: echo "PYTHONPATH=$(pwd)" >> $GITHUB_ENV
-      - name: Prepare ML artifacts
-        run: |
-          set -e
-          # Copy latest run artifacts from ml/registry/AAPL/<timestamp>/ into ml/registry/
-          if [ -d ml/registry/AAPL ]; then
-            latest=$(ls -1d ml/registry/AAPL/*/ 2>/dev/null | sort | tail -n1 || true)
-            if [ -n "$latest" ]; then
-              for f in xgb_model_AAPL.json xgb_classifier_AAPL.json; do
-                src_file="${latest}${f}"
-                if [ -s "$src_file" ]; then
-                  cp "$src_file" ml/registry/
-                else
-                  echo "Skipping empty or missing $src_file"
-                fi
-              done
-            fi
-          fi
-          # Ensure feature file exists and is non-empty in ml/features; prefer any found feature copy,
-          # otherwise fallback to ml/data AAPL parquet
-          if [ -s ml/features/AAPL.parquet ]; then
-            echo "features present and non-empty"
-          else
-            # prefer any AAPL.parquet elsewhere under ml/ (excluding ml/features)
-            src=$(find ml -type f -name 'AAPL.parquet' ! -path '*/ml/features/*' | head -n1 || true)
-            if [ -n "$src" ]; then
-              mkdir -p ml/features
-              cp "$src" ml/features/AAPL.parquet
-            elif [ -s ml/data/AAPL.parquet ]; then
-              mkdir -p ml/features
-              cp ml/data/AAPL.parquet ml/features/AAPL.parquet
-            else
-              echo "No feature source found; tests may fail without ml/features/AAPL.parquet"
-            fi
-          fi
-      - name: Prepare Parquet File
-        run: |
-          if [ ! -s ml/features/AAPL.parquet ]; then
-            python flows/flow.py
-          fi
-      - name: Ensure Parquet File Exists
-        run: |
-          if [ ! -s ml/features/AAPL.parquet ]; then
-            echo "Generating placeholder Parquet file with valid data..."
-            python -c "
-            import pandas as pd
-            import os
-            os.makedirs('ml/features', exist_ok=True)
-            df = pd.DataFrame({'col1': [1, 2, 3], 'col2': [4, 5, 6]})
-            df.to_parquet('ml/features/AAPL.parquet')
-            "
-          fi
       - name: Unit & ML tests
         run: pytest -q
 
@@ -118,11 +67,25 @@ jobs:
       - name: Run Prefect pipeline
         run: |
           python tools/run_pipeline.py
+
+      - name: Verify features produced
+        run: |
+          if [ ! -s ml/features/AAPL.parquet ]; then
+            echo "Expected ml/features/AAPL.parquet to be non-empty after pipeline run."
+            ls -la ml/features || true
+            exit 1
+          fi
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ml-registry
           path: ml/registry
+
+      - name: Upload features
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-features
+          path: ml/features
 
   deepchecks:
     runs-on: ubuntu-latest
@@ -139,6 +102,18 @@ jobs:
           python -m pip install pyarrow fastparquet -q
       - name: Set PYTHONPATH
         run: echo "PYTHONPATH=$(pwd)" >> $GITHUB_ENV
+
+      - name: Download pipeline artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ml-registry
+          path: ml/registry
+
+      - name: Download features
+        uses: actions/download-artifact@v4
+        with:
+          name: ml-features
+          path: ml/features
       - name: Run DeepChecks runner (capture exit code)
         run: |
           set +e

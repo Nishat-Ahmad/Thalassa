@@ -1,0 +1,206 @@
+{
+  "timestamp_utc": "20251216104342",
+  "ticker": "AAPL",
+  "features_path": ".\\ml\\features\\AAPL_drift.parquet",
+  "registry_root": ".\\ml\\registry",
+  "feature_mode": "engineered",
+  "overall_status": "severe",
+  "checks": [
+    {
+      "name": "file_non_empty",
+      "severity": "ok",
+      "details": {
+        "rows": 11325,
+        "cols": 28
+      }
+    },
+    {
+      "name": "missingness",
+      "severity": "ok",
+      "details": {
+        "mean_missing_rate": 0.0
+      }
+    },
+    {
+      "name": "duplicate_rows",
+      "severity": "ok",
+      "details": {
+        "duplicates": 0
+      }
+    },
+    {
+      "name": "date_monotonic",
+      "severity": "ok",
+      "details": {
+        "date_col": "date",
+        "monotonic_increasing": true
+      }
+    },
+    {
+      "name": "regressor_performance",
+      "severity": "severe",
+      "details": {
+        "rmse": 0.19267612351470695,
+        "mae": 0.1352326629485944,
+        "baseline_rmse": 0.018878247567493806
+      }
+    },
+    {
+      "name": "classifier_performance",
+      "severity": "ok",
+      "details": {
+        "logloss": 0.002979506445691662,
+        "auc": 1.0
+      }
+    },
+    {
+      "name": "data_drift",
+      "severity": "severe",
+      "details": {
+        "metric": "ks",
+        "pvalue_threshold": 0.001,
+        "shared_columns": 27,
+        "severe_columns": [
+          "Adj_Close",
+          "Close",
+          "High",
+          "Low",
+          "Open",
+          "Volume",
+          "return",
+          "log_return",
+          "sma_5",
+          "ema_5",
+          "sma_10",
+          "ema_10",
+          "sma_20",
+          "ema_20",
+          "vol_10",
+          "rsi_14",
+          "macd",
+          "macd_signal",
+          "macd_hist",
+          "lag_close_1",
+          "lag_return_1",
+          "lag_close_2",
+          "lag_return_2",
+          "lag_close_3",
+          "lag_return_3",
+          "lag_close_5",
+          "lag_return_5"
+        ],
+        "fraction_severe": 1.0,
+        "per_column": {
+          "Adj_Close": {
+            "ks_d": 0.49668874172185434,
+            "p_value": 0.0
+          },
+          "Close": {
+            "ks_d": 0.49977924944812363,
+            "p_value": 0.0
+          },
+          "High": {
+            "ks_d": 0.49942604856512146,
+            "p_value": 0.0
+          },
+          "Low": {
+            "ks_d": 0.5010154525386313,
+            "p_value": 0.0
+          },
+          "Open": {
+            "ks_d": 0.500309050772627,
+            "p_value": 0.0
+          },
+          "Volume": {
+            "ks_d": 0.7808388520971302,
+            "p_value": 0.0
+          },
+          "return": {
+            "ks_d": 0.3730684326710816,
+            "p_value": 0.0
+          },
+          "log_return": {
+            "ks_d": 0.3752759381898455,
+            "p_value": 0.0
+          },
+          "sma_5": {
+            "ks_d": 0.5003973509933775,
+            "p_value": 0.0
+          },
+          "ema_5": {
+            "ks_d": 0.5006622516556292,
+            "p_value": 0.0
+          },
+          "sma_10": {
+            "ks_d": 0.5013686534216335,
+            "p_value": 0.0
+          },
+          "ema_10": {
+            "ks_d": 0.5017218543046358,
+            "p_value": 0.0
+          },
+          "sma_20": {
+            "ks_d": 0.5022516556291391,
+            "p_value": 0.0
+          },
+          "ema_20": {
+            "ks_d": 0.5024282560706401,
+            "p_value": 0.0
+          },
+          "vol_10": {
+            "ks_d": 0.9717439293598235,
+            "p_value": 0.0
+          },
+          "rsi_14": {
+            "ks_d": 0.9972626931567329,
+            "p_value": 0.0
+          },
+          "macd": {
+            "ks_d": 0.2230463576158941,
+            "p_value": 6.643736363565992e-246
+          },
+          "macd_signal": {
+            "ks_d": 0.22754966887417216,
+            "p_value": 6.455174221375828e-256
+          },
+          "macd_hist": {
+            "ks_d": 0.2031788079470198,
+            "p_value": 4.037408078480563e-204
+          },
+          "lag_close_1": {
+            "ks_d": 0.4998675496688742,
+            "p_value": 0.0
+          },
+          "lag_return_1": {
+            "ks_d": 0.3730684326710817,
+            "p_value": 0.0
+          },
+          "lag_close_2": {
+            "ks_d": 0.49995584988962466,
+            "p_value": 0.0
+          },
+          "lag_return_2": {
+            "ks_d": 0.3730684326710817,
+            "p_value": 0.0
+          },
+          "lag_close_3": {
+            "ks_d": 0.5000441501103753,
+            "p_value": 0.0
+          },
+          "lag_return_3": {
+            "ks_d": 0.3730684326710817,
+            "p_value": 0.0
+          },
+          "lag_close_5": {
+            "ks_d": 0.5002207505518764,
+            "p_value": 0.0
+          },
+          "lag_return_5": {
+            "ks_d": 0.3729801324503311,
+            "p_value": 0.0
+          }
+        }
+      }
+    }
+  ]
+}

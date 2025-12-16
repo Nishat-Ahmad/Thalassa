@@ -1,0 +1,64 @@
+{
+  "timestamp_utc": "20251216103449",
+  "ticker": "AAPL",
+  "features_path": ".\\ml\\features\\AAPL.parquet",
+  "registry_root": ".\\ml\\registry",
+  "feature_mode": "engineered",
+  "overall_status": "ok",
+  "checks": [
+    {
+      "name": "file_non_empty",
+      "severity": "ok",
+      "details": {
+        "rows": 11325,
+        "cols": 28
+      }
+    },
+    {
+      "name": "missingness",
+      "severity": "ok",
+      "details": {
+        "mean_missing_rate": 0.0
+      }
+    },
+    {
+      "name": "duplicate_rows",
+      "severity": "ok",
+      "details": {
+        "duplicates": 0
+      }
+    },
+    {
+      "name": "date_monotonic",
+      "severity": "ok",
+      "details": {
+        "date_col": "date",
+        "monotonic_increasing": true
+      }
+    },
+    {
+      "name": "regressor_performance",
+      "severity": "ok",
+      "details": {
+        "rmse": 0.018878247567493806,
+        "mae": 0.013191091307944963,
+        "baseline_rmse": 0.018878247567493806
+      }
+    },
+    {
+      "name": "classifier_performance",
+      "severity": "ok",
+      "details": {
+        "logloss": 0.0008880045426459895,
+        "auc": 1.0
+      }
+    },
+    {
+      "name": "baseline_initialized",
+      "severity": "ok",
+      "details": {
+        "baseline_path": ".\\ml\\registry\\deepchecks\\baseline\\AAPL.parquet"
+      }
+    }
+  ]
+}

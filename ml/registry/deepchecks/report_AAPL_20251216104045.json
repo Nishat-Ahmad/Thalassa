@@ -1,0 +1,178 @@
+{
+  "timestamp_utc": "20251216104045",
+  "ticker": "AAPL",
+  "features_path": ".\\ml\\features\\AAPL.parquet",
+  "registry_root": ".\\ml\\registry",
+  "feature_mode": "engineered",
+  "overall_status": "ok",
+  "checks": [
+    {
+      "name": "file_non_empty",
+      "severity": "ok",
+      "details": {
+        "rows": 11325,
+        "cols": 28
+      }
+    },
+    {
+      "name": "missingness",
+      "severity": "ok",
+      "details": {
+        "mean_missing_rate": 0.0
+      }
+    },
+    {
+      "name": "duplicate_rows",
+      "severity": "ok",
+      "details": {
+        "duplicates": 0
+      }
+    },
+    {
+      "name": "date_monotonic",
+      "severity": "ok",
+      "details": {
+        "date_col": "date",
+        "monotonic_increasing": true
+      }
+    },
+    {
+      "name": "regressor_performance",
+      "severity": "ok",
+      "details": {
+        "rmse": 0.018878247567493806,
+        "mae": 0.013191091307944963,
+        "baseline_rmse": 0.018878247567493806
+      }
+    },
+    {
+      "name": "classifier_performance",
+      "severity": "ok",
+      "details": {
+        "logloss": 0.0008880045426459895,
+        "auc": 1.0
+      }
+    },
+    {
+      "name": "data_drift",
+      "severity": "ok",
+      "details": {
+        "metric": "ks",
+        "pvalue_threshold": 0.001,
+        "shared_columns": 27,
+        "severe_columns": [],
+        "fraction_severe": 0.0,
+        "per_column": {
+          "Adj_Close": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "Close": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "High": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "Low": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "Open": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "Volume": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "return": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "log_return": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "sma_5": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "ema_5": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "sma_10": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "ema_10": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "sma_20": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "ema_20": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "vol_10": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "rsi_14": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "macd": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "macd_signal": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "macd_hist": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "lag_close_1": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "lag_return_1": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "lag_close_2": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "lag_return_2": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "lag_close_3": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "lag_return_3": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "lag_close_5": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          },
+          "lag_return_5": {
+            "ks_d": 0.0,
+            "p_value": 1.0
+          }
+        }
+      }
+    }
+  ]
+}
