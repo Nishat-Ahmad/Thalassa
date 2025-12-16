@@ -1,0 +1,323 @@
+{
+  "generated_at": "2025-12-15T16:22:32.741807",
+  "features": "ml\\features\\AAPL.parquet",
+  "ticker": "AAPL",
+  "integrity": {
+    "rows": 11323,
+    "cols": 28,
+    "null_counts": {
+      "date": 0,
+      "Adj_Close": 0,
+      "Close": 0,
+      "High": 0,
+      "Low": 0,
+      "Open": 0,
+      "Volume": 0,
+      "return": 0,
+      "log_return": 0,
+      "sma_5": 0,
+      "ema_5": 0,
+      "sma_10": 0,
+      "ema_10": 0,
+      "sma_20": 0,
+      "ema_20": 0,
+      "vol_10": 0,
+      "rsi_14": 0,
+      "macd": 0,
+      "macd_signal": 0,
+      "macd_hist": 0,
+      "lag_close_1": 0,
+      "lag_return_1": 0,
+      "lag_close_2": 0,
+      "lag_return_2": 0,
+      "lag_close_3": 0,
+      "lag_return_3": 0,
+      "lag_close_5": 0,
+      "lag_return_5": 0
+    },
+    "duplicate_rows": 0,
+    "dtypes": {
+      "date": "datetime64[ns]",
+      "Adj_Close": "float64",
+      "Close": "float64",
+      "High": "float64",
+      "Low": "float64",
+      "Open": "float64",
+      "Volume": "int64",
+      "return": "float64",
+      "log_return": "float64",
+      "sma_5": "float64",
+      "ema_5": "float64",
+      "sma_10": "float64",
+      "ema_10": "float64",
+      "sma_20": "float64",
+      "ema_20": "float64",
+      "vol_10": "float64",
+      "rsi_14": "float64",
+      "macd": "float64",
+      "macd_signal": "float64",
+      "macd_hist": "float64",
+      "lag_close_1": "float64",
+      "lag_return_1": "float64",
+      "lag_close_2": "float64",
+      "lag_return_2": "float64",
+      "lag_close_3": "float64",
+      "lag_return_3": "float64",
+      "lag_close_5": "float64",
+      "lag_return_5": "float64"
+    }
+  },
+  "drift": {
+    "Adj_Close": {
+      "ks_stat": 0.9837665687562857,
+      "pvalue": 0.0,
+      "ref_mean": 1.5302726691525308,
+      "cur_mean": 88.86064508307285
+    },
+    "Close": {
+      "ks_stat": 0.982210558053517,
+      "pvalue": 0.0,
+      "ref_mean": 1.8296529890942606,
+      "cur_mean": 91.27287690148903
+    },
+    "High": {
+      "ks_stat": 0.9827152262341882,
+      "pvalue": 0.0,
+      "ref_mean": 1.853570296178348,
+      "cur_mean": 92.17827180795611
+    },
+    "Low": {
+      "ks_stat": 0.981958261103907,
+      "pvalue": 0.0,
+      "ref_mean": 1.8041226150580323,
+      "cur_mean": 90.28131454749636
+    },
+    "Open": {
+      "ks_stat": 0.9829675231837981,
+      "pvalue": 0.0,
+      "ref_mean": 1.8303825688307978,
+      "cur_mean": 91.19300102226026
+    },
+    "Volume": {
+      "ks_stat": 0.3892797455058051,
+      "pvalue": 8.74e-321,
+      "ref_mean": 375015233.9137017,
+      "cur_mean": 159702246.45275244
+    },
+    "return": {
+      "ks_stat": 0.1308423197176176,
+      "pvalue": 6.265509877737183e-36,
+      "ref_mean": 0.0011142611796529057,
+      "cur_mean": 0.0009244592360999954
+    },
+    "log_return": {
+      "ks_stat": 0.1308423197176176,
+      "pvalue": 6.265509877737183e-36,
+      "ref_mean": 0.0006284632809507401,
+      "cur_mean": 0.0007643078830165243
+    },
+    "sma_5": {
+      "ks_stat": 0.9830096036260045,
+      "pvalue": 0.0,
+      "ref_mean": 1.824513341384274,
+      "cur_mean": 91.12123534842945
+    },
+    "ema_5": {
+      "ks_stat": 0.983850655359247,
+      "pvalue": 0.0,
+      "ref_mean": 1.8245271916577523,
+      "cur_mean": 91.1209061670458
+    },
+    "sma_10": {
+      "ks_stat": 0.9863739591218774,
+      "pvalue": 0.0,
+      "ref_mean": 1.8181531714985664,
+      "cur_mean": 90.93002220644541
+    },
+    "ema_10": {
+      "ks_stat": 0.9865001261670452,
+      "pvalue": 0.0,
+      "ref_mean": 1.8181813085898184,
+      "cur_mean": 90.93094158773765
+    },
+    "sma_20": {
+      "ks_stat": 0.9877617966187232,
+      "pvalue": 0.0,
+      "ref_mean": 1.8055541344674608,
+      "cur_mean": 90.55101864062095
+    },
+    "ema_20": {
+      "ks_stat": 0.9880141307090587,
+      "pvalue": 0.0,
+      "ref_mean": 1.805472802498091,
+      "cur_mean": 90.55704367800872
+    },
+    "vol_10": {
+      "ks_stat": 0.4743164453710808,
+      "pvalue": 6.393e-321,
+      "ref_mean": 0.02746717175533746,
+      "cur_mean": 0.01581608103959922
+    },
+    "rsi_14": {
+      "ks_stat": 0.07837610496444482,
+      "pvalue": 3.7031759456535967e-13,
+      "ref_mean": 52.48015512493694,
+      "cur_mean": 55.217547307708706
+    },
+    "macd": {
+      "ks_stat": 0.5078408157410715,
+      "pvalue": 5.49e-321,
+      "ref_mean": 0.017858896434961195,
+      "cur_mean": 0.5181587027412939
+    },
+    "macd_signal": {
+      "ks_stat": 0.5115418890560469,
+      "pvalue": 5.385e-321,
+      "ref_mean": 0.017918030115909925,
+      "cur_mean": 0.5130281686172236
+    },
+    "macd_hist": {
+      "ks_stat": 0.407920490025821,
+      "pvalue": 8.167e-321,
+      "ref_mean": -5.913368094872703e-05,
+      "cur_mean": 0.005130534124070423
+    },
+    "lag_close_1": {
+      "ks_stat": 0.9823367250986847,
+      "pvalue": 0.0,
+      "ref_mean": 1.8270560404778828,
+      "cur_mean": 91.19713233715301
+    },
+    "lag_return_1": {
+      "ks_stat": 0.1308423197176176,
+      "pvalue": 6.265509877737183e-36,
+      "ref_mean": 0.0011191404440051402,
+      "cur_mean": 0.0009296793104171318
+    },
+    "lag_close_2": {
+      "ks_stat": 0.9824628921438525,
+      "pvalue": 0.0,
+      "ref_mean": 1.8244969278781733,
+      "cur_mean": 91.1210765740364
+    },
+    "lag_return_2": {
+      "ks_stat": 0.13096848676278539,
+      "pvalue": 5.349162044672035e-36,
+      "ref_mean": 0.001116529233626139,
+      "cur_mean": 0.0009281139569345591
+    },
+    "lag_close_3": {
+      "ks_stat": 0.9825890591890204,
+      "pvalue": 0.0,
+      "ref_mean": 1.8219393387407725,
+      "cur_mean": 91.04548908325725
+    },
+    "lag_return_3": {
+      "ks_stat": 0.13109465380795318,
+      "pvalue": 4.566128558421499e-36,
+      "ref_mean": 0.0011092157978628454,
+      "cur_mean": 0.0009333798869453411
+    },
+    "lag_close_5": {
+      "ks_stat": 0.9828413932793559,
+      "pvalue": 0.0,
+      "ref_mean": 1.8168977489217895,
+      "cur_mean": 90.89346796770744
+    },
+    "lag_return_5": {
+      "ks_stat": 0.13134698789828878,
+      "pvalue": 3.3256153895907465e-36,
+      "ref_mean": 0.001100449584012056,
+      "cur_mean": 0.0009373032400823906
+    }
+  },
+  "models": {
+    "regressor": {
+      "note": "failed to read regressor meta"
+    },
+    "classifier": {
+      "note": "failed to read classifier meta"
+    },
+    "runs": {
+      "20251215161002": {
+        "xgb_model_AAPL.json": {
+          "name": "xgb-regressor",
+          "created_at": "2025-12-15T16:10:23.876741+00:00",
+          "features": [
+            "Adj_Close",
+            "Close",
+            "High",
+            "Low",
+            "Open",
+            "Volume",
+            "log_return",
+            "sma_5",
+            "ema_5",
+            "sma_10",
+            "ema_10",
+            "sma_20",
+            "ema_20",
+            "vol_10",
+            "rsi_14",
+            "macd",
+            "macd_signal",
+            "macd_hist",
+            "lag_close_1",
+            "lag_return_1",
+            "lag_close_2",
+            "lag_return_2",
+            "lag_close_3",
+            "lag_return_3",
+            "lag_close_5",
+            "lag_return_5"
+          ],
+          "metrics": {
+            "rmse": 0.018962669509814522,
+            "mae": 0.01320298403712274
+          },
+          "artifact": "xgb_model_AAPL.ubj",
+          "ticker": "AAPL"
+        },
+        "xgb_classifier_AAPL.json": {
+          "task": "classification",
+          "model": "xgb_classifier",
+          "created": "2025-12-15T16:10:29.152976+00:00",
+          "features": [
+            "Adj_Close",
+            "Close",
+            "High",
+            "Low",
+            "Open",
+            "Volume",
+            "return",
+            "sma_5",
+            "ema_5",
+            "sma_10",
+            "ema_10",
+            "sma_20",
+            "ema_20",
+            "vol_10",
+            "rsi_14",
+            "macd",
+            "macd_signal",
+            "macd_hist",
+            "lag_close_1",
+            "lag_return_1",
+            "lag_close_2",
+            "lag_return_2",
+            "lag_close_3",
+            "lag_return_3",
+            "lag_close_5",
+            "lag_return_5"
+          ],
+          "metrics": {
+            "logloss": 0.00047747139268405865,
+            "auc": 1.0
+          },
+          "samples": 11323,
+          "ticker": "AAPL"
+        }
+      }
+    }
+  }
+}

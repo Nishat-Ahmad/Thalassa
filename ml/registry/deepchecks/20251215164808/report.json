@@ -1,0 +1,169 @@
+{
+  "generated_at": "2025-12-15T16:48:07.961751",
+  "features": "ml\\features\\AAPL.parquet",
+  "ticker": "AAPL",
+  "integrity": {
+    "rows": 11323,
+    "cols": 28,
+    "null_counts": {
+      "date": 0,
+      "Adj_Close": 0,
+      "Close": 0,
+      "High": 0,
+      "Low": 0,
+      "Open": 0,
+      "Volume": 0,
+      "return": 0,
+      "log_return": 0,
+      "sma_5": 0,
+      "ema_5": 0,
+      "sma_10": 0,
+      "ema_10": 0,
+      "sma_20": 0,
+      "ema_20": 0,
+      "vol_10": 0,
+      "rsi_14": 0,
+      "macd": 0,
+      "macd_signal": 0,
+      "macd_hist": 0,
+      "lag_close_1": 0,
+      "lag_return_1": 0,
+      "lag_close_2": 0,
+      "lag_return_2": 0,
+      "lag_close_3": 0,
+      "lag_return_3": 0,
+      "lag_close_5": 0,
+      "lag_return_5": 0
+    },
+    "duplicate_rows": 0,
+    "dtypes": {
+      "date": "datetime64[ns]",
+      "Adj_Close": "float64",
+      "Close": "float64",
+      "High": "float64",
+      "Low": "float64",
+      "Open": "float64",
+      "Volume": "int64",
+      "return": "float64",
+      "log_return": "float64",
+      "sma_5": "float64",
+      "ema_5": "float64",
+      "sma_10": "float64",
+      "ema_10": "float64",
+      "sma_20": "float64",
+      "ema_20": "float64",
+      "vol_10": "float64",
+      "rsi_14": "float64",
+      "macd": "float64",
+      "macd_signal": "float64",
+      "macd_hist": "float64",
+      "lag_close_1": "float64",
+      "lag_return_1": "float64",
+      "lag_close_2": "float64",
+      "lag_return_2": "float64",
+      "lag_close_3": "float64",
+      "lag_return_3": "float64",
+      "lag_close_5": "float64",
+      "lag_return_5": "float64"
+    }
+  },
+  "drift": {
+    "return": {
+      "ks_stat": 0.17777777777777778,
+      "pvalue": 0.11640971788193923,
+      "ref_mean": -0.0006238822028229204,
+      "cur_mean": 0.003612855651992761
+    }
+  },
+  "severe_count": 0,
+  "severe_features": [],
+  "models": {
+    "regressor": {
+      "note": "failed to read regressor meta"
+    },
+    "classifier": {
+      "note": "failed to read classifier meta"
+    },
+    "runs": {
+      "20251215161002": {
+        "xgb_model_AAPL.json": {
+          "name": "xgb-regressor",
+          "created_at": "2025-12-15T16:10:23.876741+00:00",
+          "features": [
+            "Adj_Close",
+            "Close",
+            "High",
+            "Low",
+            "Open",
+            "Volume",
+            "log_return",
+            "sma_5",
+            "ema_5",
+            "sma_10",
+            "ema_10",
+            "sma_20",
+            "ema_20",
+            "vol_10",
+            "rsi_14",
+            "macd",
+            "macd_signal",
+            "macd_hist",
+            "lag_close_1",
+            "lag_return_1",
+            "lag_close_2",
+            "lag_return_2",
+            "lag_close_3",
+            "lag_return_3",
+            "lag_close_5",
+            "lag_return_5"
+          ],
+          "metrics": {
+            "rmse": 0.018962669509814522,
+            "mae": 0.01320298403712274
+          },
+          "artifact": "xgb_model_AAPL.ubj",
+          "ticker": "AAPL"
+        },
+        "xgb_classifier_AAPL.json": {
+          "task": "classification",
+          "model": "xgb_classifier",
+          "created": "2025-12-15T16:10:29.152976+00:00",
+          "features": [
+            "Adj_Close",
+            "Close",
+            "High",
+            "Low",
+            "Open",
+            "Volume",
+            "return",
+            "sma_5",
+            "ema_5",
+            "sma_10",
+            "ema_10",
+            "sma_20",
+            "ema_20",
+            "vol_10",
+            "rsi_14",
+            "macd",
+            "macd_signal",
+            "macd_hist",
+            "lag_close_1",
+            "lag_return_1",
+            "lag_close_2",
+            "lag_return_2",
+            "lag_close_3",
+            "lag_return_3",
+            "lag_close_5",
+            "lag_return_5"
+          ],
+          "metrics": {
+            "logloss": 0.00047747139268405865,
+            "auc": 1.0
+          },
+          "samples": 11323,
+          "ticker": "AAPL"
+        }
+      }
+    }
+  }
+}

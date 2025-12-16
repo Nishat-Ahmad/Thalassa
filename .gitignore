@@ -103,3 +103,5 @@ site/
 # Ignore all per-ticker registry folders by default, but allow `AAPL` to be tracked
 /ml/registry/*
 !/ml/registry/AAPL/20251214062201
+!/ml/registry/deepchecks
+!/ml/registry/deepchecks/*

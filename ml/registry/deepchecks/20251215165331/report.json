@@ -1,0 +1,325 @@
+{
+  "generated_at": "2025-12-15T16:53:30.956815",
+  "features": "ml\\features\\AAPL.parquet",
+  "ticker": "AAPL",
+  "integrity": {
+    "rows": 11323,
+    "cols": 28,
+    "null_counts": {
+      "date": 0,
+      "Adj_Close": 0,
+      "Close": 0,
+      "High": 0,
+      "Low": 0,
+      "Open": 0,
+      "Volume": 0,
+      "return": 0,
+      "log_return": 0,
+      "sma_5": 0,
+      "ema_5": 0,
+      "sma_10": 0,
+      "ema_10": 0,
+      "sma_20": 0,
+      "ema_20": 0,
+      "vol_10": 0,
+      "rsi_14": 0,
+      "macd": 0,
+      "macd_signal": 0,
+      "macd_hist": 0,
+      "lag_close_1": 0,
+      "lag_return_1": 0,
+      "lag_close_2": 0,
+      "lag_return_2": 0,
+      "lag_close_3": 0,
+      "lag_return_3": 0,
+      "lag_close_5": 0,
+      "lag_return_5": 0
+    },
+    "duplicate_rows": 0,
+    "dtypes": {
+      "date": "datetime64[ns]",
+      "Adj_Close": "float64",
+      "Close": "float64",
+      "High": "float64",
+      "Low": "float64",
+      "Open": "float64",
+      "Volume": "int64",
+      "return": "float64",
+      "log_return": "float64",
+      "sma_5": "float64",
+      "ema_5": "float64",
+      "sma_10": "float64",
+      "ema_10": "float64",
+      "sma_20": "float64",
+      "ema_20": "float64",
+      "vol_10": "float64",
+      "rsi_14": "float64",
+      "macd": "float64",
+      "macd_signal": "float64",
+      "macd_hist": "float64",
+      "lag_close_1": "float64",
+      "lag_return_1": "float64",
+      "lag_close_2": "float64",
+      "lag_return_2": "float64",
+      "lag_close_3": "float64",
+      "lag_return_3": "float64",
+      "lag_close_5": "float64",
+      "lag_return_5": "float64"
+    }
+  },
+  "drift": {
+    "Adj_Close": {
+      "ks_stat": 0.16666666666666666,
+      "pvalue": 0.16447330422560522,
+      "ref_mean": -3.565049490185225e-16,
+      "cur_mean": -4.662936703425658e-16
+    },
+    "Close": {
+      "ks_stat": 0.16666666666666666,
+      "pvalue": 0.16447330422560522,
+      "ref_mean": 7.031412489292658e-17,
+      "cur_mean": 6.192577315131428e-16
+    },
+    "High": {
+      "ks_stat": 0.13333333333333333,
+      "pvalue": 0.40228885267878634,
+      "ref_mean": 4.928156648197223e-16,
+      "cur_mean": -4.0214745114200115e-16
+    },
+    "Low": {
+      "ks_stat": 0.16666666666666666,
+      "pvalue": 0.16447330422560522,
+      "ref_mean": 5.440478314769039e-16,
+      "cur_mean": -1.7516852166308025e-16
+    },
+    "Open": {
+      "ks_stat": 0.14444444444444443,
+      "pvalue": 0.3060345759054805,
+      "ref_mean": -1.0251059260705611e-15,
+      "cur_mean": 3.7007434154171886e-16
+    },
+    "Volume": {
+      "ks_stat": 0.14444444444444443,
+      "pvalue": 0.3060345759054805,
+      "ref_mean": -7.894919286223336e-17,
+      "cur_mean": -4.5642502123478656e-17
+    },
+    "return": {
+      "ks_stat": 0.18888888888888888,
+      "pvalue": 0.08051668622039164,
+      "ref_mean": -3.0068540250264657e-18,
+      "cur_mean": 5.1193617246604443e-17
+    },
+    "log_return": {
+      "ks_stat": 0.2,
+      "pvalue": 0.0544252960416394,
+      "ref_mean": -1.8812112361704042e-17,
+      "cur_mean": 4.934324553889585e-18
+    },
+    "sma_5": {
+      "ks_stat": 0.16666666666666666,
+      "pvalue": 0.16447330422560522,
+      "ref_mean": -5.968990733783307e-16,
+      "cur_mean": 7.944262531762232e-16
+    },
+    "ema_5": {
+      "ks_stat": 0.16666666666666666,
+      "pvalue": 0.16447330422560522,
+      "ref_mean": -2.1706016613739128e-15,
+      "cur_mean": 3.454027187722709e-17
+    },
+    "sma_10": {
+      "ks_stat": 0.13333333333333333,
+      "pvalue": 0.40228885267878634,
+      "ref_mean": -2.8162657391324805e-15,
+      "cur_mean": -1.142296134225439e-15
+    },
+    "ema_10": {
+      "ks_stat": 0.15555555555555556,
+      "pvalue": 0.22704297127140505,
+      "ref_mean": -3.4349066800763872e-15,
+      "cur_mean": -3.0420110874729288e-15
+    },
+    "sma_20": {
+      "ks_stat": 0.2,
+      "pvalue": 0.0544252960416394,
+      "ref_mean": 8.057751996501692e-15,
+      "cur_mean": 1.0534782922554263e-15
+    },
+    "ema_20": {
+      "ks_stat": 0.24444444444444444,
+      "pvalue": 0.009015400094372876,
+      "ref_mean": 2.9568939889183335e-15,
+      "cur_mean": 3.6514001698782925e-16
+    },
+    "vol_10": {
+      "ks_stat": 0.23333333333333334,
+      "pvalue": 0.01463369038004877,
+      "ref_mean": 6.78469626159818e-17,
+      "cur_mean": -2.713878504639272e-16
+    },
+    "rsi_14": {
+      "ks_stat": 0.16666666666666666,
+      "pvalue": 0.16447330422560522,
+      "ref_mean": 5.008339422197928e-16,
+      "cur_mean": 1.2927930331190711e-15
+    },
+    "macd": {
+      "ks_stat": 0.15555555555555556,
+      "pvalue": 0.22704297127140505,
+      "ref_mean": 3.14563190310461e-17,
+      "cur_mean": -1.319931818165464e-16
+    },
+    "macd_signal": {
+      "ks_stat": 0.16666666666666666,
+      "pvalue": 0.16447330422560522,
+      "ref_mean": -2.4301548427906207e-16,
+      "cur_mean": -5.347574235277837e-16
+    },
+    "macd_hist": {
+      "ks_stat": 0.12222222222222222,
+      "pvalue": 0.5145202385052693,
+      "ref_mean": 4.934324553889585e-18,
+      "cur_mean": -2.4671622769447924e-18
+    },
+    "lag_close_1": {
+      "ks_stat": 0.14444444444444443,
+      "pvalue": 0.3060345759054805,
+      "ref_mean": 1.5580129778906363e-15,
+      "cur_mean": -7.031412489292658e-16
+    },
+    "lag_return_1": {
+      "ks_stat": 0.18888888888888888,
+      "pvalue": 0.08051668622039164,
+      "ref_mean": 2.251285577712123e-17,
+      "cur_mean": 2.251285577712123e-17
+    },
+    "lag_close_2": {
+      "ks_stat": 0.14444444444444443,
+      "pvalue": 0.3060345759054805,
+      "ref_mean": -7.136266886062812e-16,
+      "cur_mean": 4.588921835117314e-16
+    },
+    "lag_return_2": {
+      "ks_stat": 0.17777777777777778,
+      "pvalue": 0.11640971788193923,
+      "ref_mean": 1.2335811384723962e-18,
+      "cur_mean": -1.5419764230904953e-17
+    },
+    "lag_close_3": {
+      "ks_stat": 0.14444444444444443,
+      "pvalue": 0.3060345759054805,
+      "ref_mean": -1.410600031843185e-15,
+      "cur_mean": 3.4540271877227093e-16
+    },
+    "lag_return_3": {
+      "ks_stat": 0.18888888888888888,
+      "pvalue": 0.08051668622039164,
+      "ref_mean": -6.167905692361981e-19,
+      "cur_mean": -1.1719020815487763e-17
+    },
+    "lag_close_5": {
+      "ks_stat": 0.14444444444444443,
+      "pvalue": 0.3060345759054805,
+      "ref_mean": 4.773959005888173e-16,
+      "cur_mean": -4.3422056074228343e-16
+    },
+    "lag_return_5": {
+      "ks_stat": 0.2,
+      "pvalue": 0.0544252960416394,
+      "ref_mean": 1.6653345369377347e-17,
+      "cur_mean": 4.934324553889585e-18
+    }
+  },
+  "severe_count": 0,
+  "severe_features": [],
+  "models": {
+    "regressor": {
+      "note": "failed to read regressor meta"
+    },
+    "classifier": {
+      "note": "failed to read classifier meta"
+    },
+    "runs": {
+      "20251215161002": {
+        "xgb_model_AAPL.json": {
+          "name": "xgb-regressor",
+          "created_at": "2025-12-15T16:10:23.876741+00:00",
+          "features": [
+            "Adj_Close",
+            "Close",
+            "High",
+            "Low",
+            "Open",
+            "Volume",
+            "log_return",
+            "sma_5",
+            "ema_5",
+            "sma_10",
+            "ema_10",
+            "sma_20",
+            "ema_20",
+            "vol_10",
+            "rsi_14",
+            "macd",
+            "macd_signal",
+            "macd_hist",
+            "lag_close_1",
+            "lag_return_1",
+            "lag_close_2",
+            "lag_return_2",
+            "lag_close_3",
+            "lag_return_3",
+            "lag_close_5",
+            "lag_return_5"
+          ],
+          "metrics": {
+            "rmse": 0.018962669509814522,
+            "mae": 0.01320298403712274
+          },
+          "artifact": "xgb_model_AAPL.ubj",
+          "ticker": "AAPL"
+        },
+        "xgb_classifier_AAPL.json": {
+          "task": "classification",
+          "model": "xgb_classifier",
+          "created": "2025-12-15T16:10:29.152976+00:00",
+          "features": [
+            "Adj_Close",
+            "Close",
+            "High",
+            "Low",
+            "Open",
+            "Volume",
+            "return",
+            "sma_5",
+            "ema_5",
+            "sma_10",
+            "ema_10",
+            "sma_20",
+            "ema_20",
+            "vol_10",
+            "rsi_14",
+            "macd",
+            "macd_signal",
+            "macd_hist",
+            "lag_close_1",
+            "lag_return_1",
+            "lag_close_2",
+            "lag_return_2",
+            "lag_close_3",
+            "lag_return_3",
+            "lag_close_5",
+            "lag_return_5"
+          ],
+          "metrics": {
+            "logloss": 0.00047747139268405865,
+            "auc": 1.0
+          },
+          "samples": 11323,
+          "ticker": "AAPL"
+        }
+      }
+    }
+  }
+}

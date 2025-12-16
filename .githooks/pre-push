@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+require_py_module() {
+  local mod="$1"
+  if ! python -c "import $mod" >/dev/null 2>&1; then
+    echo "[pre-push] Missing Python module '$mod'." >&2
+    echo "[pre-push] Install it with: python -m pip install $mod" >&2
+    exit 1
+  fi
+}
+
+require_py_module black
+
+if ! python -m ruff --version >/dev/null 2>&1; then
+  echo "[pre-push] Ruff is not installed." >&2
+  echo "[pre-push] Install it with: python -m pip install ruff" >&2
+  exit 1
+fi
+
+if ! python -m black --version >/dev/null 2>&1; then
+  echo "[pre-push] Black is not installed." >&2
+  echo "[pre-push] Install it with: python -m pip install black" >&2
+  exit 1
+fi
+
+echo "[pre-push] Running Ruff (auto-fix)…"
+python -m ruff check --fix .
+
+echo "[pre-push] Running Black (format)…"
+python -m black .
+
+# If the hook changed files, block the push so the user can commit.
+if ! git diff --quiet; then
+  echo "[pre-push] Code was reformatted or auto-fixed." >&2
+  echo "[pre-push] Please run: git add -A ; git commit -m \"style: apply ruff/black\" ; git push" >&2
+  exit 1
+fi
+
+echo "[pre-push] OK"
