@@ -1,6 +1,7 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from prefect import flow
+import requests
 
 from .steps import (
     ingest,
@@ -16,9 +17,15 @@ from .steps import (
 REGISTRY_DIR = os.path.join(os.path.dirname(__file__), "..", "ml", "registry")
 
 
+def send_discord_notification(message):
+    webhook_url = "https://discord.com/api/webhooks/1450346533798281318/OZkhPt8JlZXzT4Hy5AZr2sQPfP5s7qrpqdabiBKHC5kpoizgREw7B7XCTZNupQaI2T0_"
+    payload = {"content": message}
+    requests.post(webhook_url, json=payload)
+
+
 @flow
 def pipeline(ticker: str = "AAPL", run_dir: str | None = None):
-    ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     run_dir = run_dir or os.path.join(REGISTRY_DIR, ticker.upper(), ts)
     os.makedirs(run_dir, exist_ok=True)
     p = ingest(ticker)
@@ -37,6 +44,7 @@ def pipeline(ticker: str = "AAPL", run_dir: str | None = None):
     clusters = cluster_features(f, run_dir=run_dir)
     pca = compute_pca(f, run_dir=run_dir)
     fc = forecast_ts(f, run_dir=run_dir)
+    send_discord_notification("Pipeline succeeded!")
     return {
         "regression": m,
         "classification": cls,
@@ -48,5 +56,32 @@ def pipeline(ticker: str = "AAPL", run_dir: str | None = None):
     }
 
 
+def notify_flow_status():
+    message = """
+    **Flow Run Summary**
+    - Flow Name: slim-alligator
+    - Status: Completed
+
+    **Task Statuses:**
+    - ingest: Completed
+    - engineer: Completed
+    - train_regressor: Completed
+    - train_classification: Completed
+    - train_association_rules: Completed
+    - predict_next: Completed
+    - cluster_features: Completed
+    - compute_pca: Completed
+    - forecast_ts: Completed
+
+    All tasks ran successfully.
+    """
+    send_discord_notification(message)
+
+
 if __name__ == "__main__":
-    pipeline()
+    try:
+        pipeline()
+    except Exception as e:
+        send_discord_notification(f"Pipeline failed: {e}")
+        raise
+    notify_flow_status()
