@@ -84,12 +84,13 @@ jobs:
       - name: Ensure Parquet File Exists
         run: |
           if [ ! -s ml/features/AAPL.parquet ]; then
-            echo "Generating placeholder Parquet file..."
+            echo "Generating placeholder Parquet file with valid data..."
             python -c "
             import pandas as pd
             import os
             os.makedirs('ml/features', exist_ok=True)
-            pd.DataFrame({'col1': [1], 'col2': [2]}).to_parquet('ml/features/AAPL.parquet')
+            df = pd.DataFrame({'col1': [1, 2, 3], 'col2': [4, 5, 6]})
+            df.to_parquet('ml/features/AAPL.parquet')
             "
           fi
       - name: Unit & ML tests

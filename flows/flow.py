@@ -59,21 +59,21 @@ def pipeline(ticker: str = "AAPL", run_dir: str | None = None):
 def notify_flow_status():
     message = """
     **Flow Run Summary**
-    - Flow Name: slim-alligator
-    - Status: Completed
+    :rocket: **Flow Name**: `slim-alligator`
+    :white_check_mark: **Status**: `Completed`
 
     **Task Statuses:**
-    - ingest: Completed
-    - engineer: Completed
-    - train_regressor: Completed
-    - train_classification: Completed
-    - train_association_rules: Completed
-    - predict_next: Completed
-    - cluster_features: Completed
-    - compute_pca: Completed
-    - forecast_ts: Completed
+    - :white_check_mark: `ingest`: Completed
+    - :white_check_mark: `engineer`: Completed
+    - :white_check_mark: `train_regressor`: Completed
+    - :white_check_mark: `train_classification`: Completed
+    - :white_check_mark: `train_association_rules`: Completed
+    - :white_check_mark: `predict_next`: Completed
+    - :white_check_mark: `cluster_features`: Completed
+    - :white_check_mark: `compute_pca`: Completed
+    - :white_check_mark: `forecast_ts`: Completed
 
-    All tasks ran successfully.
+    :tada: All tasks ran successfully!
     """
     send_discord_notification(message)
 
