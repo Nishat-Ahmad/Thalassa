@@ -410,7 +410,9 @@ def upload_page(request: Request):
         pass
 
     try:
-        dates, preds = forecast_regressor_next_days(df=df, booster=booster, feat_names=feat_names, days=7)
+        dates, preds = forecast_regressor_next_days(
+            df=df, booster=booster, feat_names=feat_names, days=7
+        )
     except HTTPException as e:
         return templates.TemplateResponse(
             "upload.html",
@@ -532,7 +534,9 @@ def upload_predict(
         pass
 
     try:
-        dates, preds = forecast_regressor_next_days(df=df, booster=booster, feat_names=feat_names, days=7)
+        dates, preds = forecast_regressor_next_days(
+            df=df, booster=booster, feat_names=feat_names, days=7
+        )
     except HTTPException as e:
         return templates.TemplateResponse(
             "upload.html",

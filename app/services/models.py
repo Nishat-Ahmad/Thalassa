@@ -121,7 +121,9 @@ def forecast_regressor_next_days(
 
     # collect historical windows for updating statistics
     closes_hist = list(pd.to_numeric(df["Close"].dropna()).tail(200))
-    returns_hist = list(pd.to_numeric(df.get("return", pd.Series([])).dropna()).tail(200))
+    returns_hist = list(
+        pd.to_numeric(df.get("return", pd.Series([])).dropna()).tail(200)
+    )
 
     closes = deque(closes_hist[::-1])
     returns = deque(returns_hist[::-1])
@@ -163,12 +165,18 @@ def forecast_regressor_next_days(
             m = re.match(r"lag_close_(\d+)$", fn)
             if m:
                 k = int(m.group(1))
-                fv[fn] = float(closes[k - 1]) if k - 1 < len(closes) else float(closes[-1])
+                fv[fn] = (
+                    float(closes[k - 1]) if k - 1 < len(closes) else float(closes[-1])
+                )
                 continue
             m = re.match(r"lag_return_(\d+)$", fn)
             if m:
                 k = int(m.group(1))
-                fv[fn] = float(returns[k - 1]) if k - 1 < len(returns) else float(returns[-1])
+                fv[fn] = (
+                    float(returns[k - 1])
+                    if k - 1 < len(returns)
+                    else float(returns[-1])
+                )
                 continue
             if fn in sma_windows:
                 w = sma_windows[fn]
@@ -184,7 +192,11 @@ def forecast_regressor_next_days(
             if fn == "vol_10":
                 vals = list(returns)[:10]
                 try:
-                    fv[fn] = float(np.std(vals)) if vals else float(last_feat.get(fn, 0.0) or 0.0)
+                    fv[fn] = (
+                        float(np.std(vals))
+                        if vals
+                        else float(last_feat.get(fn, 0.0) or 0.0)
+                    )
                 except Exception:
                     fv[fn] = float(last_feat.get(fn, 0.0) or 0.0)
                 continue

@@ -1246,7 +1246,9 @@ async def predict_batch(
 
         # collect historical windows for updating statistics
         closes_hist = list(pd.to_numeric(df["Close"].dropna()).tail(200))
-        returns_hist = list(pd.to_numeric(df.get("return", pd.Series([])).dropna()).tail(200))
+        returns_hist = list(
+            pd.to_numeric(df.get("return", pd.Series([])).dropna()).tail(200)
+        )
 
         # prepare deques with newest first
         closes = deque(closes_hist[::-1])
@@ -1274,13 +1276,13 @@ async def predict_batch(
                 max_needed = max(max_needed, int(m.group(1)))
             m = re.match(r"sma_(\d+)$", fn)
             if m:
-                w = int(m.group(1)); 
-                sma_windows[fn] = w; 
+                w = int(m.group(1))
+                sma_windows[fn] = w
                 max_needed = max(max_needed, w)
             m = re.match(r"ema_(\d+)$", fn)
             if m:
-                w = int(m.group(1)); 
-                ema_windows[fn] = w; 
+                w = int(m.group(1))
+                ema_windows[fn] = w
                 max_needed = max(max_needed, w)
 
         # ensure deques are long enough
@@ -1299,12 +1301,20 @@ async def predict_batch(
                 m = re.match(r"lag_close_(\d+)$", fn)
                 if m:
                     k = int(m.group(1))
-                    fv[fn] = float(closes[k - 1]) if k - 1 < len(closes) else float(closes[-1])
+                    fv[fn] = (
+                        float(closes[k - 1])
+                        if k - 1 < len(closes)
+                        else float(closes[-1])
+                    )
                     continue
                 m = re.match(r"lag_return_(\d+)$", fn)
                 if m:
                     k = int(m.group(1))
-                    fv[fn] = float(returns[k - 1]) if k - 1 < len(returns) else float(returns[-1])
+                    fv[fn] = (
+                        float(returns[k - 1])
+                        if k - 1 < len(returns)
+                        else float(returns[-1])
+                    )
                     continue
                 # sma
                 if fn in sma_windows:
@@ -1326,7 +1336,11 @@ async def predict_batch(
                 if fn == "vol_10":
                     vals = list(returns)[:10]
                     try:
-                        fv[fn] = float(np.std(vals)) if vals else float(last_feat.get(fn, 0.0) or 0.0)
+                        fv[fn] = (
+                            float(np.std(vals))
+                            if vals
+                            else float(last_feat.get(fn, 0.0) or 0.0)
+                        )
                     except Exception:
                         fv[fn] = float(last_feat.get(fn, 0.0) or 0.0)
                     continue
