@@ -666,18 +666,32 @@ def classify_page(request: Request, ticker: str | None = None):
             and isinstance(prediction, dict)
             and prediction.get("proba_up") is not None
         ):
-            samples = model_meta.get("samples") if isinstance(model_meta, dict) else None
+            samples = (
+                model_meta.get("samples") if isinstance(model_meta, dict) else None
+            )
             sample_n = None
             if isinstance(samples, dict):
-                sample_n = samples.get("total") or samples.get("train") or samples.get("val")
+                sample_n = (
+                    samples.get("total") or samples.get("train") or samples.get("val")
+                )
             else:
                 sample_n = samples
             band = _prob_band(prediction.get("proba_up"), sample_n)
-            metrics = model_meta.get("metrics", {}) if isinstance(model_meta, dict) else {}
+            metrics = (
+                model_meta.get("metrics", {}) if isinstance(model_meta, dict) else {}
+            )
             calibration = {
                 "band": band,
-                "auc": metrics.get("auc_val") if metrics.get("auc_val") is not None else metrics.get("auc"),
-                "logloss": metrics.get("logloss_val") if metrics.get("logloss_val") is not None else metrics.get("logloss"),
+                "auc": (
+                    metrics.get("auc_val")
+                    if metrics.get("auc_val") is not None
+                    else metrics.get("auc")
+                ),
+                "logloss": (
+                    metrics.get("logloss_val")
+                    if metrics.get("logloss_val") is not None
+                    else metrics.get("logloss")
+                ),
             }
     except Exception:
         calibration = None
@@ -693,14 +707,24 @@ def classify_page(request: Request, ticker: str | None = None):
                 if isinstance(samples, dict):
                     n_val = samples.get("val") or samples.get("total")
                 reliability = {
-                    "prob_true": [None if x is None else float(x) for x in cal.get("prob_true", [])],
+                    "prob_true": [
+                        None if x is None else float(x)
+                        for x in cal.get("prob_true", [])
+                    ],
                     "prob_pred": [float(x) for x in cal.get("prob_pred", [])],
-                    "brier": float(cal["brier"]) if cal.get("brier") is not None else None,
+                    "brier": (
+                        float(cal["brier"]) if cal.get("brier") is not None else None
+                    ),
                     "n": int(n_val) if n_val is not None else None,
                     "source": "saved",
                 }
                 try:
-                    logger.info("Using saved calibration for %s: n=%s bins=%s", t, reliability.get("n"), len(reliability.get("prob_pred", [])))
+                    logger.info(
+                        "Using saved calibration for %s: n=%s bins=%s",
+                        t,
+                        reliability.get("n"),
+                        len(reliability.get("prob_pred", [])),
+                    )
                 except Exception:
                     pass
                 try:
@@ -739,7 +763,9 @@ def classify_page(request: Request, ticker: str | None = None):
                 expected_feats = []
                 try:
                     if isinstance(model_meta, dict) and model_meta.get("features"):
-                        expected_feats = [str(f) for f in model_meta.get("features", [])]
+                        expected_feats = [
+                            str(f) for f in model_meta.get("features", [])
+                        ]
                 except Exception:
                     expected_feats = []
                 if expected_feats:

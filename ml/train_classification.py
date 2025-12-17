@@ -189,9 +189,11 @@ def train_classifier(ticker: str = "AAPL", registry_dir: str | None = None):
         # fallback: simple contiguous split if sklearn not available
         split = max(int(len(X) * 0.8), 1)
         X_train, X_val = X.iloc[:split], X.iloc[split:]
-        y_train, y_val = y[: split], y[split:]
+        y_train, y_val = y[:split], y[split:]
 
-    dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=[str(c) for c in X.columns])
+    dtrain = xgb.DMatrix(
+        X_train, label=y_train, feature_names=[str(c) for c in X.columns]
+    )
     dval = xgb.DMatrix(X_val, label=y_val, feature_names=[str(c) for c in X.columns])
     params = {
         "objective": "binary:logistic",
@@ -221,10 +223,20 @@ def train_classifier(ticker: str = "AAPL", registry_dir: str | None = None):
     # Metrics
     eps = 1e-15
     logloss_train = float(
-        np.mean(-(y_train * np.log(preds_train + eps) + (1 - y_train) * np.log(1 - preds_train + eps)))
+        np.mean(
+            -(
+                y_train * np.log(preds_train + eps)
+                + (1 - y_train) * np.log(1 - preds_train + eps)
+            )
+        )
     )
     logloss_val = float(
-        np.mean(-(y_val * np.log(preds_val + eps) + (1 - y_val) * np.log(1 - preds_val + eps)))
+        np.mean(
+            -(
+                y_val * np.log(preds_val + eps)
+                + (1 - y_val) * np.log(1 - preds_val + eps)
+            )
+        )
     )
     auc_train = float(np.nan)
     auc_val = float(np.nan)
@@ -245,7 +257,9 @@ def train_classifier(ticker: str = "AAPL", registry_dir: str | None = None):
         from sklearn.calibration import calibration_curve
 
         brier = float(brier_score_loss(y_val, preds_val))
-        prob_true, prob_pred = calibration_curve(y_val, preds_val, n_bins=10, strategy="uniform")
+        prob_true, prob_pred = calibration_curve(
+            y_val, preds_val, n_bins=10, strategy="uniform"
+        )
         calibration = {
             "brier": brier,
             "prob_true": prob_true.tolist(),
@@ -270,7 +284,11 @@ def train_classifier(ticker: str = "AAPL", registry_dir: str | None = None):
             "auc_val": float(auc_val),
         },
         "calibration": calibration,
-        "samples": {"total": int(len(X)), "train": int(len(y_train)), "val": int(len(y_val))},
+        "samples": {
+            "total": int(len(X)),
+            "train": int(len(y_train)),
+            "val": int(len(y_val)),
+        },
         "ticker": ticker.upper(),
     }
     with open(meta_path, "w") as f:
