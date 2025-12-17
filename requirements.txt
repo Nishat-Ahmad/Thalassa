@@ -6,8 +6,11 @@ pandas
 numpy
 scikit-learn
 deepchecks[ml]
+pyarrow
 pytest
 python-multipart
 xgboost
 statsmodels
 mlxtend
+pyarrow
+fastparquet
