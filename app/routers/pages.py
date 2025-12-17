@@ -820,10 +820,10 @@ def classify_page(request: Request, ticker: str | None = None):
                             reliability["assess"] = _assess_bins(rel_p, rel_t)
                         except Exception:
                             reliability["assess"] = []
-                except Exception as e:
+                except Exception:
                     logger.exception("Runtime reliability compute failed for %s", t)
                     reliability = None
-    except Exception as e:
+    except Exception:
         logger.exception("Reliability outer error for %s", t)
         reliability = None
     return templates.TemplateResponse(

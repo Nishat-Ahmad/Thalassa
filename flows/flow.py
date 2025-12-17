@@ -36,10 +36,10 @@ def _maybe_fix_prefect_api_url_env() -> None:
 
 _maybe_fix_prefect_api_url_env()
 
-from prefect import flow
-import requests
+from prefect import flow  # noqa: E402
+import requests  # noqa: E402
 
-from .steps import (
+from .steps import (  # noqa: E402
     ingest,
     engineer,
     train_regressor,

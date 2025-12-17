@@ -33,32 +33,32 @@ def _maybe_fix_prefect_api_url_env() -> None:
 
 _maybe_fix_prefect_api_url_env()
 
-from prefect import task
-import json
+from prefect import task  # noqa: E402
+import json  # noqa: E402
 
-import numpy as np
-import pandas as pd
-import warnings
-import logging
-import yfinance as yf
-from datetime import datetime, UTC
-from subprocess import Popen, PIPE
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+import warnings  # noqa: E402
+import logging  # noqa: E402
+import yfinance as yf  # noqa: E402
+from datetime import datetime, UTC  # noqa: E402
+from subprocess import Popen, PIPE  # noqa: E402
 
 try:
-    from sklearn.decomposition import PCA
-    from sklearn.cluster import KMeans
-    from sklearn.preprocessing import StandardScaler
+    from sklearn.decomposition import PCA  # noqa: E402
+    from sklearn.cluster import KMeans  # noqa: E402
+    from sklearn.preprocessing import StandardScaler  # noqa: E402
 except Exception:
     PCA = None
     KMeans = None
     StandardScaler = None
 
 try:
-    import xgboost as xgb
+    import xgboost as xgb  # noqa: E402
 except Exception:
     xgb = None
 try:
-    from statsmodels.tsa.arima.model import ARIMA
+    from statsmodels.tsa.arima.model import ARIMA  # noqa: E402
 except Exception:
     ARIMA = None
 
