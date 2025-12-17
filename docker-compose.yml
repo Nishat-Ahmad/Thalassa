@@ -3,8 +3,11 @@ services:
     build: .
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - PREFECT_API_URL=http://prefect:4200/api
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
     volumes:
       - ml-registry:/app/ml/registry
       - ml-features:/app/ml/features
@@ -17,9 +20,12 @@ services:
         condition: service_started
       prefect-init:
         condition: service_completed_successfully
+    env_file:
+      - .env
     environment:
       - PREFECT_API_URL=http://prefect:4200/api
       - PREFECT_WORK_POOL=thalassa-pool
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
     volumes:
       - ml-registry:/app/ml/registry
       - ml-features:/app/ml/features
@@ -31,12 +37,15 @@ services:
     build: .
     depends_on:
       - prefect
+    env_file:
+      - .env
     environment:
       - PREFECT_API_URL=http://prefect:4200/api
       - PREFECT_WORK_POOL=thalassa-pool
       - PREFECT_DEPLOYMENT_NAME=scheduled
       - PREFECT_SCHEDULE_CRON=0 * * * *
       - PREFECT_SCHEDULE_TZ=UTC
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
     volumes:
       - ml-registry:/app/ml/registry
       - ml-features:/app/ml/features

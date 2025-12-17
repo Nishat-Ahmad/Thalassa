@@ -18,9 +18,15 @@ REGISTRY_DIR = os.path.join(os.path.dirname(__file__), "..", "ml", "registry")
 
 
 def send_discord_notification(message):
-    webhook_url = "https://discord.com/api/webhooks/1450346533798281318/OZkhPt8JlZXzT4Hy5AZr2sQPfP5s7qrpqdabiBKHC5kpoizgREw7B7XCTZNupQaI2T0_"
+    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
+    if not webhook_url:
+        return
     payload = {"content": message}
-    requests.post(webhook_url, json=payload)
+    try:
+        requests.post(webhook_url, json=payload, timeout=10)
+    except Exception:
+        # Notifications should never break the pipeline.
+        return
 
 
 @flow
