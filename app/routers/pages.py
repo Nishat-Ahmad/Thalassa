@@ -1197,7 +1197,7 @@ async def forecast_page_submit(
                     if freq is None:
                         freq = "D"
                     series = series.asfreq(freq).ffill()
-                    order = (1, 1, 1)
+                    order = (0, 1, 0)
                     model = ARIMA(series, order=order)
                     fitted = model.fit()
                     fc_vals = fitted.forecast(steps=horizon)

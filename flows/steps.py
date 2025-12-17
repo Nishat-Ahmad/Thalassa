@@ -446,7 +446,7 @@ def forecast_ts(feature_path: str, horizon: int = 7, run_dir: str | None = None)
         # fallback to daily frequency but only if index has reasonable spacing
         freq = "D"
     series = series.asfreq(freq).ffill()
-    order = (1, 1, 1)
+    order = (0, 1, 0)
     logger = logging.getLogger(__name__)
     try:
         # disable automatic re-parameterization enforcement to avoid

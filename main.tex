@@ -1,91 +1,85 @@
-% main.tex --- Thalassa Project Report (single-file, Overleaf-ready)
-\documentclass[11pt]{article}
+\documentclass[conference, onecolumn]{IEEEtran}
 
-% Required packages (as requested)
+% Required packages
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
 \usepackage{graphicx}
-\usepackage{hyperref}
+\usepackage{textcomp}
+\usepackage{xcolor}
 \usepackage{listings}
 \usepackage{float}
-\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{booktabs} % Added for better table formatting
 
-\geometry{margin=1in}
-
+% Hyperlink setup
 \hypersetup{
   colorlinks=true,
-  linkcolor=blue,
+  linkcolor=black, % IEEE uses black for print compatibility
   urlcolor=blue,
-  citecolor=blue
+  citecolor=black
 }
 
+% Listing setup for code blocks
 \lstset{
-  basicstyle=\ttfamily\small,
+  basicstyle=\ttfamily\small, % Slightly larger font for single column readability
   breaklines=true,
   columns=fullflexible,
   frame=single,
-  showstringspaces=false
+  showstringspaces=false,
+  captionpos=b
 }
 
-\title{Thalassa: End-to-End Finance ML System}
-\author{\textit{<Your Name>}}
-\date{\today}
+% Title and Author setup
+\title{Thalassa: Finance ML System\\
+\large Project Report}
+
+\author{\IEEEauthorblockN{Nishat Ahmad}
+\IEEEauthorblockA{\textit{Domain: Economics \& Finance} \\
+\textit{Tech Stack: Python 3.11, FastAPI, Prefect, Docker, GitHub Actions}\\
+\today}
+}
 
 \begin{document}
 
-% --------------------
-% Title page
-% --------------------
-\begin{titlepage}
-  \centering
-  \vspace*{2cm}
-  {\LARGE\bfseries Thalassa: End-to-End Finance ML System\par}
-  \vspace{1.5cm}
-  {\large Project Report\par}
-  \vspace{2cm}
-  {\large \author\par}
-  \vspace{0.5cm}
-  {\large \date\par}
-  \vfill
-  \begin{flushleft}
-    \textbf{Tech Stack:} Python 3.11, FastAPI, Prefect, XGBoost, Docker, GitHub Actions\\
-    \textbf{Domain:} Economics \& Finance
-  \end{flushleft}
-  \vspace*{1cm}
-\end{titlepage}
+\maketitle
+
+% Abstract
+\begin{abstract}
+This project addresses the gap in financial machine learning by implementing an automated, end-to-end ML system that turns a manual research workflow into a repeatable MLOps pipeline. The system ingests market data using \texttt{yfinance} with retries and timeouts; engineers time-series features (rolling statistics, momentum indicators, lags); trains multiple models (classification, regression, forecasting) and unsupervised modules (PCA, KMeans); and produces versioned artifacts (models, metadata, and diagnostics) and exposes them through an API.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Finance ML, MLOps, Time Series, Automation, Docker
+\end{IEEEkeywords}
 
 \section{Introduction \& Problem Statement}
-Financial time series are noisy, non-stationary, and influenced by stochastic shocks (macro events, liquidity regimes, and sentiment). In practice, teams often begin with ad-hoc notebooks that download data, compute features, train a model, and visually inspect results. While effective for exploration, notebook-driven workflows are difficult to reproduce, hard to validate systematically, and fragile to operationalize (changing dependencies, inconsistent data snapshots, and manual re-runs).
-
-\textbf{Thalassa} addresses this gap by implementing an automated, end-to-end ML system for finance that turns a manual research workflow into a repeatable MLOps pipeline. The system:
-\begin{itemize}
-  \item Ingests market data using \texttt{yfinance} with retries and timeouts.
-  \item Engineers time-series features (rolling statistics, momentum indicators, lags).
-  \item Trains multiple models (classification, regression, forecasting) and unsupervised modules (PCA, KMeans).
-  \item Produces versioned artifacts (models, metadata, and diagnostics) and exposes them through an API.
-\end{itemize}
+Financial time series are noisy, non-stationary, and influenced by stochastic shocks (macro events, liquidity regimes, and sentiment). In practice, teams often begin with notebooks that download data, compute features, train a model, and visually inspect results. While effective for exploration, notebook-driven workflows are difficult to reproduce, hard to validate systematically, and fragile to operationalize (changing dependencies, inconsistent data snapshots, and manual re-runs).
 
 The core problem statement is: \textit{How can we reliably train, validate, version, and serve financial ML models on continually drifting market data without relying on manual, error-prone notebook execution?}
 
 \section{ML Experiments \& Comparison}
 Thalassa runs multiple ML tasks in one orchestration flow, enabling side-by-side experimentation and comparison across supervised and unsupervised approaches.
 
-\textbf{Prediction (Supervised Learning).}
+\subsection{Prediction (Supervised Learning)}
 \begin{itemize}
   \item \textbf{XGBoost Regressor:} Predicts next-day return using engineered features. The training code performs an 80/20 temporal split and reports regression metrics such as RMSE and MAE (computed on the held-out split).
   \item \textbf{XGBoost Classifier:} Predicts next-day direction (Up/Down) using a binary logistic objective. The model trains with early stopping against a validation split and reports probabilistic metrics including \textbf{Logloss} and \textbf{AUC}. In addition, the training pipeline computes calibration statistics (e.g., Brier score and calibration curve bins) to assess reliability of predicted probabilities.
 \end{itemize}
 
-\textbf{Forecasting (Time Series).}
+\subsection{Forecasting (Time Series)}
 \begin{itemize}
   \item \textbf{ARIMA(1,1,1):} Fits a classical statistical model to the close-price series (frequency-inferred, forward-filled) and produces a multi-step forecast (default horizon 7). Saved outputs include predictions, confidence intervals, and model selection diagnostics (AIC/BIC) plus residual-based error summaries.
 \end{itemize}
 
-\textbf{Clustering \& Representation Learning (Unsupervised).}
+\subsection{Clustering \& Representation Learning (Unsupervised)}
 \begin{itemize}
   \item \textbf{PCA:} Reduces feature dimensionality (default up to 5 components). Outputs include explained variance ratio, component vectors, and scaling parameters to support downstream visualization and analysis.
   \item \textbf{KMeans:} Clusters feature vectors into regimes (default 5 clusters). Outputs include inertia, cluster centers, and label counts to summarize regime distribution.
 \end{itemize}
 
-\textbf{Comparison Guidance.} In finance, the "best" model is often task-dependent:
+\subsection{Comparison Guidance}
+In finance, the ``best'' model is often task-dependent:
 \begin{itemize}
   \item For trading-like binary decisions, AUC summarizes ranking ability while Logloss reflects probability quality; calibration metrics help quantify reliability.
   \item For continuous return modeling, RMSE/MAE measure error magnitude but must be interpreted in the context of return scale and regime volatility.
@@ -96,21 +90,15 @@ Thalassa runs multiple ML tasks in one orchestration flow, enabling side-by-side
 \section{System Architecture}
 Thalassa is designed as a modular system that separates orchestration, serving, and artifact persistence.
 
-\begin{figure}[H]
+\begin{figure}[htbp]
   \centering
-  \fbox{\parbox{0.95\linewidth}{
-    \centering
-    \vspace{0.5cm}
-    \textbf{System Architecture Diagram Placeholder}\\
-    \vspace{0.2cm}
-    (Insert a diagram showing: \textbf{FastAPI container} exposing endpoints; \textbf{Prefect Server} providing UI/API for orchestration; a \textbf{Prefect Worker} executing tasks; shared \textbf{Docker volumes} mounted into both API and worker; and an artifact layout on disk.\\
-    \vspace{0.5cm}
-  }}
+  % Make sure the filename inside {} matches exactly what you uploaded
+  \includegraphics[width=0.8\linewidth]{system_arch.png}
   \caption{High-level system architecture of Thalassa. The FastAPI service serves predictions/forecasts and can trigger the Prefect pipeline. Prefect Server coordinates runs, while the worker executes ETL + training. Artifacts are persisted to the filesystem as Parquet (data/features), JSON (metadata/forecasts/reports), UBJ (XGBoost models), and NPY (arrays), enabling deterministic reuse across services.}
   \label{fig:system-architecture}
 \end{figure}
 
-\textbf{Key interactions.}
+\textbf{Key interactions:}
 \begin{itemize}
   \item \textbf{FastAPI} loads trained artifacts (e.g., XGBoost boosters and JSON metadata) from the shared registry and provides REST endpoints.
   \item \textbf{Prefect Server} runs the orchestration layer (tracking flow runs, deployments, retries, and schedules).
@@ -121,7 +109,7 @@ Thalassa is designed as a modular system that separates orchestration, serving, 
 \section{Containerization Workflow}
 Thalassa uses Docker for reproducibility and Docker Compose for local multi-service orchestration.
 
-\textbf{Containers.}
+\textbf{Containers:}
 \begin{itemize}
   \item \textbf{API container:} Runs \texttt{uvicorn app.main:app} and exposes port 8000.
   \item \textbf{Prefect Server container:} Runs \texttt{prefect server start} and exposes port 4200 for UI and API.
@@ -129,23 +117,16 @@ Thalassa uses Docker for reproducibility and Docker Compose for local multi-serv
   \item \textbf{Prefect init container (one-shot):} Bootstraps the work pool and registers a scheduled deployment (cron) before exiting.
 \end{itemize}
 
-\textbf{Shared volumes for artifacts.} Docker Compose mounts named volumes to ensure both the API and the worker see identical artifacts:
+\textbf{Shared volumes for artifacts:} Docker Compose mounts named volumes to ensure both the API and the worker see identical artifacts:
 \begin{itemize}
   \item \texttt{ml/data} for raw data snapshots (Parquet)
   \item \texttt{ml/features} for engineered features (Parquet)
   \item \texttt{ml/registry} for model/version outputs (UBJ/JSON/NPY) and ML check reports
 \end{itemize}
 
-\begin{figure}[H]
+\begin{figure}[htbp]
   \centering
-  \fbox{\parbox{0.95\linewidth}{
-    \centering
-    \vspace{0.5cm}
-    \textbf{Containerization Workflow Diagram Placeholder}\\
-    \vspace{0.2cm}
-    (Insert a diagram showing: \textbf{docker compose up} building an image once; starting services \texttt{prefect}, \texttt{prefect-init}, \texttt{prefect-worker}, and \texttt{api}; and named volumes shared between \texttt{api} and \texttt{prefect-worker}.)\\
-    \vspace{0.5cm}
-  }}
+  \includegraphics[width=0.8\linewidth]{container_workflow.png}
   \caption{Containerization workflow. Docker ensures dependency and runtime consistency (Python 3.11 + ML libraries). Docker Compose coordinates multiple services and uses shared volumes so pipeline outputs are instantly available to the API without copying.}
   \label{fig:container-workflow}
 \end{figure}
@@ -153,7 +134,7 @@ Thalassa uses Docker for reproducibility and Docker Compose for local multi-serv
 \section{CI/CD Pipeline Explanation}
 The project uses GitHub Actions to enforce code quality, run tests, execute the pipeline, validate outputs, and finally build/push a Docker image.
 
-\textbf{Pipeline stages (job ordering).}
+\textbf{Pipeline stages (job ordering):}
 \begin{itemize}
   \item \textbf{Linting/Formatting:} \texttt{ruff check .} and \texttt{black --check .}.
   \item \textbf{Testing:} \texttt{pytest -q} with CI-friendly tests that avoid requiring network access.
@@ -178,7 +159,6 @@ python tools/run_pipeline.py
 python ml/deepchecks/run_deepchecks.py --features ml/features/AAPL.parquet --registry ml/registry --ticker AAPL --fail-on-severe
 
 # Build & push image happens after checks
-
 docker build -t ghcr.io/<owner>/thalassa-api:latest .
 docker push ghcr.io/<owner>/thalassa-api:latest
 \end{lstlisting}
@@ -186,7 +166,7 @@ docker push ghcr.io/<owner>/thalassa-api:latest
 \section{Prefect Orchestration Flow}
 The Prefect flow (\texttt{flows/flow.py}) orchestrates the end-to-end pipeline with clear task boundaries and artifact persistence.
 
-\textbf{Concrete flow order.} A single run constructs a timestamped run directory (UTC) and executes:
+\textbf{Concrete flow order:} A single run constructs a timestamped run directory (UTC) and executes:
 \begin{itemize}
   \item \textbf{Ingest:} Download price data from \texttt{yfinance} and write raw snapshots to Parquet.
   \item \textbf{Engineer:} Build time-series features (returns, rolling means/EMAs, volatility, RSI, MACD, lags) and persist features to Parquet.
@@ -196,16 +176,9 @@ The Prefect flow (\texttt{flows/flow.py}) orchestrates the end-to-end pipeline w
   \item \textbf{Optional post-step:} Produce a next-day probability and label using the latest feature row (\texttt{predict\_next}).
 \end{itemize}
 
-\begin{figure}[H]
+\begin{figure}[htbp]
   \centering
-  \fbox{\parbox{0.95\linewidth}{
-    \centering
-    \vspace{0.5cm}
-    \textbf{Prefect Flow Diagram Placeholder}\\
-    \vspace{0.2cm}
-    (Insert a DAG-like diagram with nodes: \texttt{ingest} $\rightarrow$ \texttt{engineer} $\rightarrow$ \texttt{train\_regressor} and \texttt{train\_classification}; then branching to \texttt{train\_association\_rules}, \texttt{cluster\_features}, \texttt{compute\_pca}, and \texttt{forecast\_ts}; finally optionally \texttt{predict\_next}. Annotate that outputs are written to \texttt{ml/registry/<TICKER>/<UTC\_TS>/}.)\\
-    \vspace{0.5cm}
-  }}
+  \includegraphics[width=0.8\linewidth]{prefect_flow.png}
   \caption{Prefect orchestration in Thalassa. Tasks are isolated, retryable, and produce explicit artifacts that can be reused by downstream steps and by the serving layer.}
   \label{fig:prefect-flow}
 \end{figure}
@@ -213,32 +186,52 @@ The Prefect flow (\texttt{flows/flow.py}) orchestrates the end-to-end pipeline w
 \section{Methodology Flow}
 This section describes the full data journey from raw ingestion to serving predictions through the API.
 
-\textbf{1) Data ingestion (raw layer).} The system downloads historical OHLCV market data using \texttt{yfinance}. The ingestion task includes both Prefect-level retries and internal exponential backoff attempts to handle rate limits and transient failures. The raw dataset is stored as Parquet in \texttt{ml/data/}.
+\subsection{Data ingestion (raw layer)}
+The system downloads historical OHLCV market data using \texttt{yfinance}. The ingestion task includes both Prefect-level retries and internal exponential backoff attempts to handle rate limits and transient failures. The raw dataset is stored as Parquet in \texttt{ml/data/}.
 
-\textbf{2) Feature engineering (feature layer).} The pipeline constructs engineered features such as:
-\begin{itemize}
-  \item Simple returns and log returns
-  \item Rolling windows: SMA/EMA for multiple horizons
-  \item Volatility estimate (rolling standard deviation)
-  \item Momentum/oscillators: RSI, MACD (signal and histogram)
-  \item Lagged values for close and returns
-\end{itemize}
+\subsection{Feature engineering (feature layer)}
+The pipeline constructs engineered features. Table \ref{tab:feature-lookup} provides a lookup reference for the core technical indicators used.
+
+% LOOKUP TABLE ADDED HERE
+\begin{table}[htbp]
+\caption{Feature Engineering Lookup Table}
+\label{tab:feature-lookup}
+\begin{center}
+\begin{tabular}{|l|l|p{9cm}|}
+\hline
+\textbf{Feature} & \textbf{Type} & \textbf{Description \& Purpose} \\
+\hline
+SMA / EMA & Trend & Simple/Exponential Moving Averages smooth price noise to reveal general direction (e.g., 30-day trend). \\
+\hline
+RSI & Momentum & Relative Strength Index (0--100). Measures speed of price changes. $>$70 implies overbought; $<$30 implies oversold. \\
+\hline
+MACD & Momentum & Measures relationship between two moving averages. Divergence signals potential trend reversals. \\
+\hline
+Volatility & Risk & Rolling standard deviation of returns. High values indicate chaotic/risky market regimes. \\
+\hline
+Lags & Memory & Past values (e.g., $t-1, t-7$) shifted to the current row. Allows the model to ``see'' history explicitly. \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+
 These features are persisted as Parquet in \texttt{ml/features/}.
 
-\textbf{3) Modeling (model layer).} Supervised models train on engineered features:
+\subsection{Modeling (model layer)}
+Supervised models train on engineered features:
 \begin{itemize}
   \item Regression trains on numeric feature columns and predicts next-day returns.
   \item Classification builds labels from next-day return sign and optimizes a probabilistic objective.
 \end{itemize}
 The system also runs PCA/KMeans to summarize structure and regimes, and ARIMA to forecast price trajectories.
 
-\textbf{4) Artifact versioning (registry layer).} All run outputs are written under:
-\begin{center}
-\texttt{ml/registry/<TICKER>/<UTC\_TIMESTAMP>/}
-\end{center}
+\subsection{Artifact versioning (registry layer)}
+All run outputs are written under:
+\texttt{ml/registry/<TICKER>/<UTC\_TIMESTAMP>/}.
 This folder includes model binaries (XGBoost UBJ), metadata (JSON), arrays (NPY), and forecasting outputs (JSON). A dedicated subdirectory can store ML check reports.
 
-\textbf{5) Validation gates (quality layer).} The internal DeepChecks-style runner evaluates:
+\subsection{Validation gates (quality layer)}
+The internal DeepChecks-style runner evaluates:
 \begin{itemize}
   \item Data integrity: missingness, duplicates, and date monotonicity.
   \item Drift checks: a KS-test heuristic across numeric features (with configurable windowing).
@@ -246,26 +239,21 @@ This folder includes model binaries (XGBoost UBJ), metadata (JSON), arrays (NPY)
 \end{itemize}
 Reports are stored under \texttt{ml/registry/deepchecks/} and can block CI if severe issues are detected.
 
-\textbf{6) Serving (API layer).} FastAPI exposes endpoints for health checks, triggering pipelines, prediction, classification, and forecasting. The service loads artifacts from the registry and aligns feature vectors to the model's expected feature order before inference.
+\subsection{Serving (API layer)}
+FastAPI exposes endpoints for health checks, triggering pipelines, prediction, classification, and forecasting. The service loads artifacts from the registry and aligns feature vectors to the model's expected feature order before inference.
 
-\begin{figure}[H]
+\begin{figure}[htbp]
   \centering
-  \fbox{\parbox{0.95\linewidth}{
-    \centering
-    \vspace{0.5cm}
-    \textbf{Complete Methodology Flow Diagram Placeholder}\\
-    \vspace{0.2cm}
-    (Insert an end-to-end flow diagram showing: \texttt{yfinance} download $\rightarrow$ raw Parquet in \texttt{ml/data} $\rightarrow$ engineered Parquet in \texttt{ml/features} $\rightarrow$ training modules (XGBoost regressor/classifier, PCA, KMeans, ARIMA) $\rightarrow$ artifact outputs in \texttt{ml/registry/<TICKER>/<UTC\_TS>} $\rightarrow$ DeepChecks report generation $\rightarrow$ FastAPI endpoints loading those artifacts to answer \texttt{/predict}, \texttt{/predict-class}, and \texttt{/forecast}.)\\
-    \vspace{0.5cm}
-  }}
+  \includegraphics[width=0.8\linewidth]{methodology_flow.png}
   \caption{End-to-end methodology in Thalassa. The pipeline operationalizes data collection, feature engineering, training, validation, and serving into a repeatable MLOps loop, with filesystem-based artifact versioning as the system of record.}
   \label{fig:methodology-flow}
 \end{figure}
 
 \section{Final Observations, Limitations, \& Future Work}
-\textbf{Observations.} Thalassa demonstrates that a single orchestrated workflow can support multiple finance ML tasks while maintaining reproducibility through artifact versioning. For classification, probability quality is emphasized using Logloss and AUC, supplemented by calibration statistics (e.g., Brier score and calibration bins) to evaluate reliability. For regression and forecasting, the system records error summaries (RMSE/MAE) and ARIMA diagnostics (AIC/BIC), supporting transparent model comparison.
 
-\textbf{Limitations.}
+\textbf{Observations:} Thalassa demonstrates that a single orchestrated workflow can support multiple finance ML tasks while maintaining reproducibility through artifact versioning. For classification, probability quality is emphasized using Logloss and AUC, supplemented by calibration statistics (e.g., Brier score and calibration bins) to evaluate reliability. For regression and forecasting, the system records error summaries (RMSE/MAE) and ARIMA diagnostics (AIC/BIC), supporting transparent model comparison.
+
+\textbf{Limitations:}
 \begin{itemize}
   \item \textbf{Data-source dependency:} Reliance on \texttt{yfinance} introduces fragility (rate limits, outages, and changing symbol metadata).
   \item \textbf{Non-stationarity and drift:} Market regimes change; historical performance may not translate to future periods.
@@ -273,15 +261,12 @@ Reports are stored under \texttt{ml/registry/deepchecks/} and can block CI if se
   \item \textbf{Forecasting simplicity:} ARIMA provides a strong baseline but may underfit complex dynamics and volatility clustering.
 \end{itemize}
 
-\textbf{Future work.}
+\textbf{Future work:}
 \begin{itemize}
   \item \textbf{Real-time/streaming ingestion:} Replace batch downloads with streaming feeds, incremental feature computation, and near-real-time inference.
   \item \textbf{Stronger validation:} Add walk-forward cross-validation, stability metrics, and improved drift detection (multivariate drift, seasonality-aware checks).
   \item \textbf{Richer models:} Explore volatility-aware approaches, probabilistic forecasting, and deep time-series models where justified (while balancing operational complexity).
   \item \textbf{Registry hardening:} Move from filesystem-only artifacts to a dedicated model registry/feature store and introduce explicit promotion stages.
 \end{itemize}
-
-\vspace{0.5cm}
-\noindent\textit{Note: Replace \author\ with your actual name before submission.}
 
 \end{document}

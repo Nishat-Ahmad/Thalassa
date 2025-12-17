@@ -13,8 +13,8 @@
   {% if error %}<p class="alert" style="margin:8px 0 0">{{ error }}</p>{% endif %}
 </section>
 
-<div class="forecast-root container">
-  <div class="forecast-left">
+<div class="forecast-root container" style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
+  <div class="forecast-left" style="width:360px;min-width:260px;">
     <div class="forecast-card">
       <h3 style="margin-top:0">Persisted Forecast</h3>
       {% if forecast %}
@@ -22,43 +22,10 @@
           <div><strong>Created:</strong> {{ forecast.created_at }}</div>
           <div><strong>Horizon:</strong> {{ forecast.horizon }} days</div>
           <div><strong>Order:</strong> {{ forecast.order }}</div>
-          <div><strong>AIC / BIC:</strong> {{ '%.2f'|format(forecast.aic) }} / {{ '%.2f'|format(forecast.bic) }}</div>
           <div><strong>Last Close:</strong> {{ '%.2f'|format(forecast.last_observation) }}</div>
-          {% if forecast.log_likelihood is defined and forecast.log_likelihood is not none %}
-            <div><strong>Log-likelihood:</strong> {{ '%.2f'|format(forecast.log_likelihood) }}</div>
-          {% elif forecast.llf is defined and forecast.llf is not none %}
-            <div><strong>Log-likelihood:</strong> {{ '%.2f'|format(forecast.llf) }}</div>
-          {% else %}
-            <div><strong>Log-likelihood:</strong> <span class="muted">N/A</span></div>
-          {% endif %}
+          {# AIC/BIC and Log-likelihood moved to Metrics card #}
 
-          {% if forecast.metrics is defined %}
-            {% if forecast.metrics.rmse is defined and forecast.metrics.rmse is not none %}
-              <div><strong>Train RMSE:</strong> {{ '%.4f'|format(forecast.metrics.rmse) }}</div>
-            {% elif forecast.rmse is defined and forecast.rmse is not none %}
-              <div><strong>Train RMSE:</strong> {{ '%.4f'|format(forecast.rmse) }}</div>
-            {% else %}
-              <div><strong>Train RMSE:</strong> <span class="muted">N/A</span></div>
-            {% endif %}
-            {% if forecast.metrics.mae is defined and forecast.metrics.mae is not none %}
-              <div><strong>Train MAE:</strong> {{ '%.4f'|format(forecast.metrics.mae) }}</div>
-            {% elif forecast.mae is defined and forecast.mae is not none %}
-              <div><strong>Train MAE:</strong> {{ '%.4f'|format(forecast.mae) }}</div>
-            {% else %}
-              <div><strong>Train MAE:</strong> <span class="muted">N/A</span></div>
-            {% endif %}
-          {% else %}
-            {% if forecast.rmse is defined and forecast.rmse is not none %}
-              <div><strong>Train RMSE:</strong> {{ '%.4f'|format(forecast.rmse) }}</div>
-            {% else %}
-              <div><strong>Train RMSE:</strong> <span class="muted">N/A</span></div>
-            {% endif %}
-            {% if forecast.mae is defined and forecast.mae is not none %}
-              <div><strong>Train MAE:</strong> {{ '%.4f'|format(forecast.mae) }}</div>
-            {% else %}
-              <div><strong>Train MAE:</strong> <span class="muted">N/A</span></div>
-            {% endif %}
-          {% endif %}
+          <!-- Metrics moved to separate card -->
           <div style="margin-top:12px">
             <a class="btn btn-outline" href="/forecast{% if ticker %}?ticker={{ ticker }}{% endif %}" target="_blank">Open JSON</a>
           </div>
@@ -69,7 +36,66 @@
     </div>
   </div>
 
-  <div class="forecast-right">
+  <div class="forecast-middle" style="width:360px;min-width:260px;">
+    <div class="forecast-card">
+      <h3 style="margin-top:0">Metrics & Calibration</h3>
+      {% if forecast or computed %}
+        <div style="display:flex;flex-direction:column;gap:6px">
+          {# Prefer computed metrics when available, else persisted #}
+          {% set meta = computed if computed is defined and computed else forecast %}
+          {% if meta is defined and meta %}
+            {% if meta.metrics is defined %}
+              <div><strong>Train RMSE:</strong> {% if meta.metrics.rmse is defined %}{{ '%.4f'|format(meta.metrics.rmse) }}{% else %}-{% endif %}</div>
+              <div><strong>Train MAE:</strong> {% if meta.metrics.mae is defined %}{{ '%.4f'|format(meta.metrics.mae) }}{% else %}-{% endif %}</div>
+            {% else %}
+              {% if meta.rmse is defined %}
+                <div><strong>Train RMSE:</strong> {{ '%.4f'|format(meta.rmse) }}</div>
+              {% else %}
+                <div><strong>Train RMSE:</strong> <span class="muted">N/A</span></div>
+              {% endif %}
+              {% if meta.mae is defined %}
+                <div><strong>Train MAE:</strong> {{ '%.4f'|format(meta.mae) }}</div>
+              {% else %}
+                <div><strong>Train MAE:</strong> <span class="muted">N/A</span></div>
+              {% endif %}
+            {% endif %}
+
+            <div style="margin-top:8px"><strong>Model Fit</strong></div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-left:6px">
+              {% if meta.aic is defined and meta.bic is defined %}
+                <div><strong>AIC / BIC:</strong> {{ '%.2f'|format(meta.aic) }} / {{ '%.2f'|format(meta.bic) }}</div>
+              {% else %}
+                <div><strong>AIC / BIC:</strong> <span class="muted">N/A</span></div>
+              {% endif %}
+              {% if meta.log_likelihood is defined and meta.log_likelihood is not none %}
+                <div><strong>Log-likelihood:</strong> {{ '%.2f'|format(meta.log_likelihood) }}</div>
+              {% elif meta.llf is defined and meta.llf is not none %}
+                <div><strong>Log-likelihood:</strong> {{ '%.2f'|format(meta.llf) }}</div>
+              {% else %}
+                <div><strong>Log-likelihood:</strong> <span class="muted">N/A</span></div>
+              {% endif %}
+            </div>
+
+            {# Calibration block (if available) #}
+            {% if meta.calibration is defined and meta.calibration %}
+              <div style="margin-top:8px"><strong>Calibration:</strong></div>
+              <div style="display:flex;flex-direction:column;gap:4px;margin-left:6px">
+                {% for k,v in meta.calibration.items() %}
+                  <div><strong>{{ k }}:</strong> {{ v }}</div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div style="margin-top:8px" class="muted">No calibration data available.</div>
+            {% endif %}
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="muted">No metrics or calibration available.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="forecast-right" style="flex:1;min-width:320px;">
     <div class="forecast-card">
       <h3 style="margin-top:0">Generate New Forecast</h3>
       <form action="/forecast-page" method="post" class="form" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
