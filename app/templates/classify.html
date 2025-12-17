@@ -23,7 +23,6 @@
       {% if model_meta %}
         <p><strong>Model:</strong> {{ model_meta.get('model') or model_meta.get('name') or 'xgb_classifier' }}</p>
         <p><strong>Created:</strong> {{ model_meta.get('created') or model_meta.get('created_at') }}</p>
-        <p><strong>Samples:</strong> {{ model_meta.get('samples', 'N/A') }}</p>
         <p><strong>Features:</strong> {{ (model_meta.get('features')|length) if model_meta.get('features') else 'N/A' }}</p>
         {% if model_meta.get('metrics') %}
         {% endif %}
@@ -88,96 +87,141 @@
 </div>
 
 <!-- Pipeline Summary: moved here to appear below Model/Features/Form -->
-<section class="panel" style="margin-top:12px;margin-bottom:12px;">
-  <h4>Pipeline Summary</h4>
-  {% if prediction %}
-    <p>Source date: <strong>{{ prediction.source_date }}</strong></p>
-    <p>
-      Prediction (tomorrow): <strong>{{ prediction.label == 1 and 'Up' or 'Down' }}</strong>
-      — probability: <strong>{{ '%.3f'|format(prediction.proba_up) }}</strong>
-      {% if calibration and calibration.band %}
-        <small class="muted">(95% CI: {{ '%.3f'|format(calibration.band.lower) }}–{{ '%.3f'|format(calibration.band.upper) }})</small>
-        <span title="Approximate 95% confidence interval computed as ±1.96 * sqrt(p*(1-p)/n) where n is model training sample count (or a fallback)."></span>
-      {% else %}
-        <span title="No calibration/band information available"></span>
-      {% endif %}
-    </p>
-  {% else %}
-    <p class="muted">No pipeline prediction available for this ticker. Run the pipeline to generate one.</p>
-  {% endif %}
-</section>
-
-
-<!-- Metrics & Calibration card (separate visual card) -->
-<div class="cards" style="margin-top:12px">
-  <div class="card">
-    <h3>Metrics & Calibration</h3>
-    {% if model_meta and model_meta.get('metrics') %}
-      {% set m = model_meta.get('metrics') %}
-      <div class="detail-kv" style="margin-top:6px">
-        <div class="detail-row"><div class="detail-key">Logloss</div><div class="detail-val">{{ '%.4f'|format(m.get('logloss')) if m.get('logloss') is not none else '—' }}</div></div>
-        <div class="detail-row"><div class="detail-key">AUC</div><div class="detail-val">{{ '%.4f'|format(m.get('auc')) if m.get('auc') is not none else '—' }}</div></div>
-      </div>
-      <div style="margin-top:8px" class="muted">
-        <div><strong>What this tells you</strong></div>
-        <div>- <strong>Logloss</strong>: lower is better; measures how well predicted probabilities match actual outcomes. Very small values can indicate excellent fit or overfitting.</div>
-        <div>- <strong>AUC</strong>: closer to 1.0 is better; measures ranking/separation ability. AUC = 1.0 indicates perfect ordering (watch for overfitting).</div>
-      </div>
-    {% else %}
-      <div class="muted">No model metrics available.</div>
-    {% endif %}
-
-    {% if calibration %}
-      <div style="margin-top:10px">
-        <div class="detail-kv">
-          <div class="detail-row"><div class="detail-key">Prob. band (95%)</div><div class="detail-val">{% if calibration.band %}{{ '%.3f'|format(calibration.band.lower) }}–{{ '%.3f'|format(calibration.band.upper) }} (n={{ calibration.band.n }}){% else %}&mdash;{% endif %}</div></div>
-        </div>
-      </div>
-    {% endif %}
-    
-  </div>
-</div>
-
-
-<!-- Reliability / Calibration curve card (separate) -->
-<div class="cards" style="margin-top:12px">
-  <div class="card">
-    <h3>Reliability / Calibration</h3>
-    {% if reliability %}
-      {% if reliability.brier is not none %}
+<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-top:12px;margin-bottom:12px">
+  <div style="flex:1;min-width:280px;">
+    <div class="card">
+      <h3>Pipeline Summary</h3>
+      {% if prediction %}
         <div class="detail-kv" style="margin-top:6px">
-          <div class="detail-row"><div class="detail-key">Brier</div><div class="detail-val">{{ '%.4f'|format(reliability.brier) }}</div></div>
-          <div class="detail-row"><div class="detail-key">Samples</div><div class="detail-val">{{ reliability.n }}</div></div>
+          <div class="detail-row"><div class="detail-key">Source date</div><div class="detail-val"><strong>{{ prediction.source_date }}</strong></div></div>
+          <div class="detail-row"><div class="detail-key">Prediction (tomorrow)</div><div class="detail-val"><strong>{{ prediction.label == 1 and 'Up' or 'Down' }}</strong> — {{ '%.3f'|format(prediction.proba_up) }}</div></div>
+        </div>
+      {% else %}
+        <div class="muted">No pipeline prediction available for this ticker. Run the pipeline to generate one.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="flex:1;min-width:280px;">
+    <div class="card">
+      <h3>Metrics & Calibration</h3>
+      {% if model_meta and model_meta.get('metrics') %}
+        {% set m = model_meta.get('metrics') %}
+        {% set s = model_meta.get('samples') %}
+        <div class="detail-kv" style="margin-top:6px">
+          <div class="detail-row"><div class="detail-key">Logloss</div><div class="detail-val">{{ '%.4f'|format(m.get('logloss_val')) if m.get('logloss_val') is not none else ('%.4f'|format(m.get('logloss')) if m.get('logloss') is not none else '—') }}</div></div>
+          <div class="detail-row"><div class="detail-key">AUC</div><div class="detail-val">{{ '%.4f'|format(m.get('auc_val')) if m.get('auc_val') is not none else ('%.4f'|format(m.get('auc')) if m.get('auc') is not none else '—') }}</div></div>
+          <div class="detail-row"><div class="detail-key">Samples</div><div class="detail-val">{% if s %}{{ s.get('total') }} (train={{ s.get('train') }}, val={{ s.get('val') }}){% else %}&mdash;{% endif %}</div></div>
+        </div>
+        
+      {% else %}
+        <div class="muted">No model metrics available.</div>
+      {% endif %}
+
+      {% if calibration %}
+        <div style="margin-top:10px">
+          <div class="detail-kv">
+            <div class="detail-row"><div class="detail-key">Prob. band (95%)</div><div class="detail-val">{% if calibration.band %}{{ '%.3f'|format(calibration.band.lower) }}–{{ '%.3f'|format(calibration.band.upper) }} (n={{ calibration.band.n }}){% else %}&mdash;{% endif %}</div></div>
+          </div>
         </div>
       {% endif %}
-      <div class="muted" style="margin-top:6px">Shown by probability bin: predicted vs observed frequency.</div>
-      <div style="margin-top:8px">
-        <div style="display:flex;flex-direction:column;gap:6px;">
+    </div>
+  </div>
+
+  <div style="flex:1;min-width:320px;">
+    <div class="card">
+      <h3>Reliability / Calibration</h3>
+      {% if reliability %}
+        {% if reliability.brier is not none %}
+          <div class="detail-kv" style="margin-top:6px">
+            <div class="detail-row"><div class="detail-key">Brier</div><div class="detail-val">{{ '%.4f'|format(reliability.brier) }}</div></div>
+            <div class="detail-row"><div class="detail-key">Samples</div><div class="detail-val">{{ reliability.n }}</div></div>
+          </div>
+        {% endif %}
+        <div class="muted" style="margin-top:6px">Shown by probability bin: predicted vs observed frequency.</div>
+        <div style="margin-top:10px" class="detail-kv">
           {% for i in range(reliability.prob_pred|length) %}
             {% set p_pred = reliability.prob_pred[i] %}
             {% set p_true = reliability.prob_true[i] %}
-            {% set pred_pct = (p_pred if p_pred is not none else 0) * 100 %}
-            {% set true_pct = (p_true if p_true is not none else 0) * 100 %}
-            <div style="display:flex;align-items:center;gap:8px;">
-              <div style="width:32px;font-size:12px;color:#fff">#{{ i+1 }}</div>
-              <div style="flex:1;display:flex;flex-direction:column;gap:3px">
-                <div style="height:10px;background:#f1f5ff;border:1px solid #d9e6ff;position:relative">
-                  <div style="height:100%;background:#2b7be4;width:{{ pred_pct }}%;opacity:0.9"></div>
-                  <div style="height:4px;background:#ff7070;position:absolute;left:0;top:3px;width:{{ true_pct }}%;opacity:0.9"></div>
-                </div>
-                <div style="display:flex;justify-content:space-between;font-size:12px;color:#fff">
-                  <div>pred {{ p_pred is not none and '%.3f'|format(p_pred) or '—' }}</div>
-                  <div>obs {{ p_true is not none and '%.3f'|format(p_true) or '—' }}</div>
-                </div>
+            {% set assess = (reliability.assess[i] if reliability.assess is defined and reliability.assess|length > i else '') %}
+            {% set color = 'var(--primary)' %}
+            {% if assess == 'Good' %}
+              {% set color = '#48c774' %}
+            {% elif assess == 'Over' %}
+              {% set color = '#ff6b6b' %}
+            {% elif assess == 'Under' %}
+              {% set color = '#ff9f43' %}
+            {% else %}
+              {% set color = 'var(--muted)' %}
+            {% endif %}
+            <div class="detail-row" style="display:flex;align-items:center;gap:8px;">
+              <div style="min-width:72px;display:flex;align-items:center;gap:8px;">
+                {% if assess %}
+                  <span style="background:{% if color %}{{ color }}{% endif %};color:#fff;padding:4px 8px;border-radius:8px;font-weight:600;font-size:12px">{{ assess }}</span>
+                {% endif %}
+                <div class="detail-key">Bin {{ i+1 }}</div>
               </div>
+              <div class="detail-val">pred {{ p_pred is not none and '%.3f'|format(p_pred) or '—' }} · obs {{ p_true is not none and '%.3f'|format(p_true) or '—' }}</div>
             </div>
           {% endfor %}
         </div>
-      </div>
-    {% else %}
-      <div class="muted">No reliability data available. Run the pipeline or train the model to compute calibration.</div>
-    {% endif %}
+      {% else %}
+        <div class="muted">No reliability data available. Run the pipeline or train the model to compute calibration.</div>
+      {% endif %}
+    </div>
   </div>
+</div>
+
+<div style="margin-top:12px">
+  <section class="panel">
+    <h4>Glossary</h4>
+    <div style="margin-top:6px">
+      <div class="gloss-item" style="margin-top:6px">
+        <button type="button" class="gloss-toggle btn small btn-outline" data-target="gloss-logloss" aria-expanded="false">Logloss ▸</button>
+        <div id="gloss-logloss" class="gloss-body muted" style="display:none;margin-top:8px" aria-hidden="true">
+          <strong>Logloss</strong>: lower is better; measures how well predicted probabilities match actual outcomes. Very small values can indicate excellent fit or overfitting.
+        </div>
+      </div>
+
+      <div class="gloss-item" style="margin-top:8px">
+        <button type="button" class="gloss-toggle btn small btn-outline" data-target="gloss-auc" aria-expanded="false">AUC ▸</button>
+        <div id="gloss-auc" class="gloss-body muted" style="display:none;margin-top:8px" aria-hidden="true">
+          <strong>AUC</strong>: closer to 1.0 is better; measures ranking/separation ability.
+        </div>
+      </div>
+      
+      <div class="gloss-item" style="margin-top:8px">
+        <button type="button" class="gloss-toggle btn small btn-outline" data-target="gloss-brier" aria-expanded="false">Brier score ▸</button>
+        <div id="gloss-brier" class="gloss-body muted" style="display:none;margin-top:8px" aria-hidden="true">
+          <strong>Brier score</strong>: the mean squared error of probabilistic predictions for binary outcomes. Computed as the average of (predicted_prob − actual_label)^2 over examples. Lower is better (0 is perfect). Use the Brier score to assess how close predicted probabilities are to observed outcomes.
+        </div>
+      </div>
+
+      <div class="gloss-item" style="margin-top:8px">
+        <button type="button" class="gloss-toggle btn small btn-outline" data-target="gloss-bins" aria-expanded="false">Bins ▸</button>
+        <div id="gloss-bins" class="gloss-body muted" style="display:none;margin-top:8px" aria-hidden="true">
+          <strong>Bins</strong>: predicted probabilities are grouped into discrete ranges (e.g., 5 bins) so we can compare the average predicted probability in a bin to the observed frequency of the event in that bin. Good calibration means predicted ≈ observed within each bin.
+        </div>
+      </div>
+
+      <div class="gloss-item" style="margin-top:8px">
+        <button type="button" class="gloss-toggle btn small btn-outline" data-target="gloss-probband" aria-expanded="false">Prob. band ▸</button>
+        <div id="gloss-probband" class="gloss-body muted" style="display:none;margin-top:8px" aria-hidden="true">
+          <strong>Prob. band (95%)</strong>: an approximate 95% confidence interval around a predicted probability, computed as p ± 1.96·sqrt(p(1−p)/n) where n is the sample count used for the estimate. The band shows expected sampling variability — if observed frequency lies outside the band, the prediction may be miscalibrated beyond random noise.
+        </div>
+      </div>
+
+      <div class="gloss-item" style="margin-top:8px">
+        <button type="button" class="gloss-toggle btn small btn-outline" data-target="gloss-howto" aria-expanded="false">How to read these diagnostics ▸</button>
+        <div id="gloss-howto" class="gloss-body muted" style="display:none;margin-top:8px" aria-hidden="true">
+          <div><strong>Quick guide</strong> — start with the Brier score (lower is better). Then inspect bins:</div>
+          <div style="margin-top:6px">- If a bin's predicted probability is higher than the observed frequency, the model is overconfident for that range.</div>
+          <div style="margin-top:4px">- If predicted is lower than observed, the model is underconfident.</div>
+          <div style="margin-top:4px">- Use the probability band to judge whether deviations could be due to sampling variability: if observed lies inside the band, the difference may be expected by chance; if outside, it's evidence of miscalibration.</div>
+        </div>
+      </div>
+    </div>
+  </section>
 </div>
 
 {% endblock %}
@@ -238,6 +282,24 @@
         setTimeout(()=> btnCopy.textContent = 'Copy', 1200);
       });
     }catch(e){ console.warn('feature token init failed', e); }
+  })();
+  // Glossary dropdown toggles
+  (function(){
+    try{
+      const toggles = Array.from(document.querySelectorAll('.gloss-toggle'));
+      toggles.forEach(btn => {
+        const targetId = btn.getAttribute('data-target');
+        const target = document.getElementById(targetId);
+        btn.addEventListener('click', ()=>{
+          if(!target) return;
+          const isHidden = target.style.display === 'none' || getComputedStyle(target).display === 'none';
+          target.style.display = isHidden ? '' : 'none';
+          btn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+          target.setAttribute('aria-hidden', isHidden ? 'false' : 'true');
+          btn.textContent = btn.textContent.replace(/(▸|▾)$/, '') + (isHidden ? ' ▾' : ' ▸');
+        });
+      });
+    }catch(e){ console.warn('glossary init failed', e); }
   })();
 </script>
 {% endblock %}

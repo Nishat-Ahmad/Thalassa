@@ -20,6 +20,7 @@ from ..core import (
     association_path,
 )
 from ..services.models import load_xgb, align_to_booster_features
+import logging
 
 try:
     from statsmodels.tsa.arima.model import ARIMA
@@ -31,6 +32,7 @@ except Exception:
     xgb = None
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _prob_band(p: float, n: int | None, z: float = 1.96):
@@ -46,6 +48,36 @@ def _prob_band(p: float, n: int | None, z: float = 1.96):
     lo = max(0.0, p - z * se)
     hi = min(1.0, p + z * se)
     return {"lower": lo, "upper": hi, "n": N, "alpha": 0.05}
+
+
+def _assess_bins(prob_pred, prob_true):
+    """Return a list of one-word assessments for each bin: Good, Mixed, Over, Under."""
+    out = []
+    try:
+        eps_good = 0.03
+        eps_bad = 0.05
+        for p, t in zip(prob_pred, prob_true):
+            if p is None or t is None:
+                out.append("Mixed")
+                continue
+            try:
+                pdv = float(p)
+                tdv = float(t)
+            except Exception:
+                out.append("Mixed")
+                continue
+            diff = pdv - tdv
+            if abs(diff) <= eps_good:
+                out.append("Good")
+            elif diff > eps_bad:
+                out.append("Over")
+            elif diff < -eps_bad:
+                out.append("Under")
+            else:
+                out.append("Mixed")
+    except Exception:
+        return []
+    return out
 
 
 def _safe_ticker(ticker: str | None) -> str:
@@ -634,36 +666,65 @@ def classify_page(request: Request, ticker: str | None = None):
             and isinstance(prediction, dict)
             and prediction.get("proba_up") is not None
         ):
-            samples = (
-                model_meta.get("samples") if isinstance(model_meta, dict) else None
-            )
-            band = _prob_band(prediction.get("proba_up"), samples)
+            samples = model_meta.get("samples") if isinstance(model_meta, dict) else None
+            sample_n = None
+            if isinstance(samples, dict):
+                sample_n = samples.get("total") or samples.get("train") or samples.get("val")
+            else:
+                sample_n = samples
+            band = _prob_band(prediction.get("proba_up"), sample_n)
+            metrics = model_meta.get("metrics", {}) if isinstance(model_meta, dict) else {}
             calibration = {
                 "band": band,
-                "auc": (
-                    model_meta.get("metrics", {}).get("auc")
-                    if isinstance(model_meta, dict)
-                    else None
-                ),
-                "logloss": (
-                    model_meta.get("metrics", {}).get("logloss")
-                    if isinstance(model_meta, dict)
-                    else None
-                ),
+                "auc": metrics.get("auc_val") if metrics.get("auc_val") is not None else metrics.get("auc"),
+                "logloss": metrics.get("logloss_val") if metrics.get("logloss_val") is not None else metrics.get("logloss"),
             }
     except Exception:
         calibration = None
-    # compute reliability curve (calibration curve) using available features+labels if possible
+
+    # Prefer saved calibration from model metadata when available.
     reliability = None
     try:
-        feat_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
-        )
-        if os.path.exists(feat_path):
-            df_feats = pd.read_parquet(feat_path)
+        if isinstance(model_meta, dict):
+            cal = model_meta.get("calibration")
+            if isinstance(cal, dict) and cal.get("prob_true") and cal.get("prob_pred"):
+                samples = model_meta.get("samples")
+                n_val = None
+                if isinstance(samples, dict):
+                    n_val = samples.get("val") or samples.get("total")
+                reliability = {
+                    "prob_true": [None if x is None else float(x) for x in cal.get("prob_true", [])],
+                    "prob_pred": [float(x) for x in cal.get("prob_pred", [])],
+                    "brier": float(cal["brier"]) if cal.get("brier") is not None else None,
+                    "n": int(n_val) if n_val is not None else None,
+                    "source": "saved",
+                }
+                try:
+                    logger.info("Using saved calibration for %s: n=%s bins=%s", t, reliability.get("n"), len(reliability.get("prob_pred", [])))
+                except Exception:
+                    pass
+                try:
+                    rel_p = reliability.get("prob_pred", [])
+                    rel_t = reliability.get("prob_true", [])
+                    reliability["assess"] = _assess_bins(rel_p, rel_t)
+                except Exception:
+                    reliability["assess"] = []
+    except Exception:
+        reliability = None
+    # compute reliability curve (calibration curve) using available features+labels if possible
+    # (only if not already available from saved metadata)
+    try:
+        if reliability is not None:
+            pass
+        else:
+            feat_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "ml", "features", f"{t}.parquet"
+            )
+            if os.path.exists(feat_path):
+                df_feats = pd.read_parquet(feat_path)
             # derive a simple next-day label similar to training: next-close > close
             if "log_return" in df_feats.columns:
-                ret = df_feats["log_return"]
+                ret = df_feats["log_return"].shift(-1)
             elif "Close" in df_feats.columns:
                 close = pd.to_numeric(df_feats["Close"], errors="coerce")
                 ret = (close.shift(-1) - close) / close
@@ -673,16 +734,29 @@ def classify_page(request: Request, ticker: str | None = None):
                 valid = ~pd.isna(ret)
                 dfx = df_feats.loc[valid].copy()
                 y = (ret[valid] > 0).astype(int).to_numpy()
-                # pick numeric columns as a conservative feature set
-                X = dfx.select_dtypes(include=[np.number]).copy()
-                if "log_return" in X.columns:
-                    X = X.drop(columns=["log_return"])
+
+                # Build X based on the model's expected feature list (prevents feature mismatch).
+                expected_feats = []
+                try:
+                    if isinstance(model_meta, dict) and model_meta.get("features"):
+                        expected_feats = [str(f) for f in model_meta.get("features", [])]
+                except Exception:
+                    expected_feats = []
+                if expected_feats:
+                    X = dfx.copy()
+                    # ensure all expected columns exist
+                    for col in expected_feats:
+                        if col not in X.columns:
+                            X[col] = np.nan
+                    X = X[expected_feats]
+                else:
+                    X = dfx.select_dtypes(include=[np.number]).copy()
+
                 X = X.replace([np.inf, -np.inf], np.nan)
                 try:
-                    X = X.fillna(method="ffill").fillna(method="bfill")
+                    X = X.ffill().bfill()
                 except Exception:
                     pass
-                # final NaN fill per-column
                 for c in X.columns:
                     if X[c].isna().any():
                         try:
@@ -740,9 +814,17 @@ def classify_page(request: Request, ticker: str | None = None):
                             "n": int(len(y)),
                             "source": "training",
                         }
-                except Exception:
+                        try:
+                            rel_p = reliability.get("prob_pred", [])
+                            rel_t = reliability.get("prob_true", [])
+                            reliability["assess"] = _assess_bins(rel_p, rel_t)
+                        except Exception:
+                            reliability["assess"] = []
+                except Exception as e:
+                    logger.exception("Runtime reliability compute failed for %s", t)
                     reliability = None
-    except Exception:
+    except Exception as e:
+        logger.exception("Reliability outer error for %s", t)
         reliability = None
     return templates.TemplateResponse(
         "classify.html",

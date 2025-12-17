@@ -1,6 +1,40 @@
+import os
+import socket
+from urllib.parse import urlparse, urlunparse
+
+
+def _maybe_fix_prefect_api_url_env() -> None:
+    """Fix Docker-only PREFECT_API_URL when running on the host.
+
+    Docker Compose uses http://prefect:4200/api. On the host, use localhost.
+    This must run before importing Prefect.
+    """
+
+    prefect_api_url = os.environ.get("PREFECT_API_URL")
+    if not prefect_api_url:
+        return
+
+    try:
+        parsed = urlparse(prefect_api_url)
+    except Exception:
+        return
+
+    if parsed.hostname != "prefect":
+        return
+
+    try:
+        socket.gethostbyname("prefect")
+        return
+    except Exception:
+        pass
+
+    os.environ["PREFECT_API_URL"] = urlunparse(parsed._replace(netloc="localhost:4200"))
+
+
+_maybe_fix_prefect_api_url_env()
+
 from prefect import task
 import json
-import os
 
 import numpy as np
 import pandas as pd

@@ -2,54 +2,74 @@
 {% block content %}
 <section class="hero">
   <div class="hero-content">
-    <h1 class="hero-title">Finance & Economics ML Platform</h1>
-    <p class="hero-subtitle">Train, serve, and monitor ML models end-to-end — pipelines, model registry, and lightweight monitoring in one place.</p>
+    <h1 class="hero-title">Thalassa</h1>
+    <p class="hero-subtitle">Train, serve, and monitor ML models end-to-end — from market data to features, models, and quality checks.</p>
     <div class="hero-actions">
-      <a class="btn" href="/data">View Data</a>
-      <a class="btn btn-primary" href="/tasks">ML Tasks</a>
+      <a class="btn" href="/search">Explore Symbols</a>
+      <a class="btn btn-primary" href="/tasks">Run ML Tasks</a>
     </div>
-    <div style="margin-top:16px;" class="muted">Quick actions: upload data, run training, or inspect model performance.</div>
-  </div>
-  <div class="illustration">
-    <div class="panel">
-      <!-- simple placeholder illustration -->
-      <svg width="220" height="120" viewBox="0 0 220 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <rect x="2" y="2" width="216" height="116" rx="10" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.03)"/>
-        <path d="M18 86 L46 46 L74 76 L102 34 L130 74 L158 44 L186 90" stroke="rgba(25,211,197,0.9)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-        <circle cx="18" cy="86" r="3" fill="rgba(255,255,255,0.9)" />
-        <circle cx="46" cy="46" r="3" fill="rgba(255,255,255,0.9)" />
-        <circle cx="186" cy="90" r="3" fill="rgba(255,255,255,0.9)" />
-      </svg>
-    </div>
+    <div style="margin-top:16px;" class="muted">Start here to explore a ticker, run the pipeline, then inspect saved artifacts and predictions.</div>
   </div>
 </section>
 
-<section class="cards" aria-label="features">
+<section class="panel">
+  <h2>What this project is</h2>
+  <p class="small">This app is a end-to-end ML platform for finance: it pulls time-series market data, builds technical indicators, trains models, stores artifacts in a local registry, and runs quality checks so you can iterate safely.</p>
+  <ul class="list">
+    <li><strong>UI + API:</strong> FastAPI serves both HTML pages and endpoints for actions.</li>
+    <li><strong>Orchestration:</strong> Prefect coordinates pipeline steps (local or Docker).</li>
+    <li><strong>Artifacts:</strong> Data, features, and models are stored on disk for reproducibility.</li>
+  </ul>
+</section>
+
+<section class="cards" aria-label="components">
   <article class="card">
-    <h3>Data Ingestion</h3>
-    <p class="small">Historical OHLCV, resampling, cleaning and validation pipelines.</p>
+    <h3>Market Data</h3>
+    <p class="small">Fetch and inspect historical prices (e.g., OHLCV) and basic summary stats for a ticker.</p>
   </article>
   <article class="card">
-    <h3>Feature Engineering</h3>
-    <p class="small">SMA/EMA, RSI, MACD, volatility and lagged features ready for modeling.</p>
+    <h3>Features</h3>
+    <p class="small">Compute technical indicators (SMA/EMA, RSI, MACD, volatility, lags) for training and inference.</p>
   </article>
   <article class="card">
     <h3>Model Registry</h3>
-    <p class="small">Versioned artifacts, metrics and simple promotion workflow for deployment.</p>
+    <p class="small">Persist model artifacts + metadata so results are repeatable and easy to inspect.</p>
   </article>
   <article class="card">
-    <h3>Monitoring</h3>
-    <p class="small">Drift checks and status indicators to keep models healthy in production.</p>
+    <h3>Quality Checks</h3>
+    <p class="small">Run data integrity + performance checks to catch issues early.</p>
   </article>
 </section>
 
 <section class="panel">
-  <h2>Current Status</h2>
+  <h2>What happens in a pipeline run</h2>
   <ul class="list">
-    <li>Website + API running</li>
-    <li>Prefect flow prototype implemented</li>
-    <li>XGBoost baseline trained and served</li>
+    <li><strong>Ingest:</strong> fetch market history for a symbol.</li>
+    <li><strong>Validate + clean:</strong> basic integrity checks and preprocessing.</li>
+    <li><strong>Engineer features:</strong> compute indicators and lagged features.</li>
+    <li><strong>Train + evaluate:</strong> fit models and record metrics.</li>
+    <li><strong>Save artifacts:</strong> write datasets/features/models to disk (registry-style layout).</li>
+    <li><strong>Monitor:</strong> run checks (e.g., performance) to surface regressions.</li>
   </ul>
+</section>
+
+<section class="panel">
+  <h2>Where outputs are stored</h2>
+  <ul class="list">
+    <li><strong>Raw/processed data:</strong> under <span class="muted">ml/data</span></li>
+    <li><strong>Engineered features:</strong> under <span class="muted">ml/features</span></li>
+    <li><strong>Model registry + reports:</strong> under <span class="muted">ml/registry</span></li>
+  </ul>
+  <div class="muted small">If you run via Docker Compose, these map to shared volumes so the API, Prefect server, and worker can all see the same artifacts.</div>
+</section>
+
+<section class="panel">
+  <h2>Next actions</h2>
+  <div class="hero-actions">
+    <a class="btn" href="/upload">Predict</a>
+    <a class="btn" href="/contact">Support</a>
+  </div>
+  <div style="margin-top:12px;" class="muted">Tip: if you run Prefect locally (outside Docker), set Prefect’s API URL to <span class="muted">http://127.0.0.1:4200/api</span>.</div>
 </section>
 
 {% endblock %}

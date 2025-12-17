@@ -114,15 +114,20 @@ def build_labels(
     # Use next-day return classification: up (1) if return > 0 else down (0)
     # If a `log_return` exists, use it; else compute from Close.
     dfx = df.copy()
+    # prefer an explicit target_col if provided
     if target_col and target_col in dfx.columns:
         ret = dfx[target_col]
-    elif "log_return" in dfx.columns:
-        ret = dfx["log_return"]
-    elif "Close" in dfx.columns:
-        close = dfx["Close"].astype(float)
-        ret = (close.shift(-1) - close) / close
     else:
-        raise ValueError("No suitable target columns found (log_return or Close)")
+        # compute next-day return from Close whenever possible (avoids using
+        # current-day 'return' / 'log_return' which would leak the target)
+        if "Close" in dfx.columns:
+            close = dfx["Close"].astype(float)
+            ret = (close.shift(-1) - close) / close
+        elif "log_return" in dfx.columns:
+            # if only log_return present, assume it's current-day and shift it
+            ret = dfx["log_return"].shift(-1)
+        else:
+            raise ValueError("No suitable target columns found (Close or log_return)")
 
     y = (ret > 0).astype(int).to_numpy()
     # Drop rows with NaN target
@@ -131,28 +136,26 @@ def build_labels(
     y = y[valid.values if hasattr(valid, "values") else valid]
     # Keep only numeric features
     X = dfx.select_dtypes(include=[np.number])
-    # Drop target leakage columns
-    for col in ["log_return"]:
+    # Drop columns that directly encode the target (current-day return/log_return)
+    for col in ["return", "log_return"]:
         if col in X.columns:
             X = X.drop(columns=[col])
-        # Replace infinities with NaN
-        X = X.replace([np.inf, -np.inf], np.nan)
-        # Impute missing feature values conservatively so we don't lose many rows
-        # forward-fill then back-fill then fill remaining with column median
-        try:
-            X = X.fillna(method="ffill").fillna(method="bfill")
-        except Exception:
-            pass
-        # for any remaining NAs, fill with median per-column
-        for c in X.columns:
-            if X[c].isna().any():
-                try:
-                    med = float(X[c].median(skipna=True))
-                    if np.isnan(med):
-                        med = 0.0
-                except Exception:
+    # Replace infinities with NaN
+    X = X.replace([np.inf, -np.inf], np.nan)
+    # Impute missing feature values: forward/backward fill then median
+    try:
+        X = X.ffill().bfill()
+    except Exception:
+        pass
+    for c in X.columns:
+        if X[c].isna().any():
+            try:
+                med = float(X[c].median(skipna=True))
+                if np.isnan(med):
                     med = 0.0
-                X[c] = X[c].fillna(med)
+            except Exception:
+                med = 0.0
+            X[c] = X[c].fillna(med)
     # Align y
     y = y[: len(X)]
     return X, y
@@ -173,7 +176,23 @@ def train_classifier(ticker: str = "AAPL", registry_dir: str | None = None):
             "samples": int(len(X)),
         }
 
-    dtrain = xgb.DMatrix(X, label=y, feature_names=[str(c) for c in X.columns])
+    # Split into train / validation so we evaluate generalization (avoid
+    # reporting optimistic train-only metrics)
+    try:
+        from sklearn.model_selection import train_test_split
+
+        stratify = y if len(np.unique(y)) > 1 else None
+        X_train, X_val, y_train, y_val = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=stratify
+        )
+    except Exception:
+        # fallback: simple contiguous split if sklearn not available
+        split = max(int(len(X) * 0.8), 1)
+        X_train, X_val = X.iloc[:split], X.iloc[split:]
+        y_train, y_val = y[: split], y[split:]
+
+    dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=[str(c) for c in X.columns])
+    dval = xgb.DMatrix(X_val, label=y_val, feature_names=[str(c) for c in X.columns])
     params = {
         "objective": "binary:logistic",
         "eval_metric": ["logloss", "auc"],
@@ -183,22 +202,57 @@ def train_classifier(ticker: str = "AAPL", registry_dir: str | None = None):
         "colsample_bytree": 0.8,
         "seed": 42,
     }
-    booster = xgb.train(params, dtrain, num_boost_round=200)
 
-    # Simple evaluation on train (for demo); in production, add a holdout split
-    preds = booster.predict(dtrain)
+    # Use early stopping on validation set to reduce overfitting
+    watchlist = [(dtrain, "train"), (dval, "validation")]
+    booster = xgb.train(
+        params,
+        dtrain,
+        num_boost_round=200,
+        evals=watchlist,
+        early_stopping_rounds=10,
+        verbose_eval=False,
+    )
+
+    # Predictions on train and validation
+    preds_train = booster.predict(dtrain)
+    preds_val = booster.predict(dval)
+
     # Metrics
     eps = 1e-15
-    logloss = float(
-        np.mean(-(y * np.log(preds + eps) + (1 - y) * np.log(1 - preds + eps)))
+    logloss_train = float(
+        np.mean(-(y_train * np.log(preds_train + eps) + (1 - y_train) * np.log(1 - preds_train + eps)))
     )
-    auc = float(np.nan)
+    logloss_val = float(
+        np.mean(-(y_val * np.log(preds_val + eps) + (1 - y_val) * np.log(1 - preds_val + eps)))
+    )
+    auc_train = float(np.nan)
+    auc_val = float(np.nan)
     try:
         from sklearn.metrics import roc_auc_score
 
-        auc = float(roc_auc_score(y, preds))
+        if len(np.unique(y_train)) > 1:
+            auc_train = float(roc_auc_score(y_train, preds_train))
+        if len(np.unique(y_val)) > 1:
+            auc_val = float(roc_auc_score(y_val, preds_val))
     except Exception:
         pass
+
+    # Calibration / reliability: Brier score + calibration curve on validation
+    calibration = {}
+    try:
+        from sklearn.metrics import brier_score_loss
+        from sklearn.calibration import calibration_curve
+
+        brier = float(brier_score_loss(y_val, preds_val))
+        prob_true, prob_pred = calibration_curve(y_val, preds_val, n_bins=10, strategy="uniform")
+        calibration = {
+            "brier": brier,
+            "prob_true": prob_true.tolist(),
+            "prob_pred": prob_pred.tolist(),
+        }
+    except Exception:
+        calibration = {}
 
     registry = registry_dir or REGISTRY_DIR
     os.makedirs(registry, exist_ok=True)
@@ -209,8 +263,14 @@ def train_classifier(ticker: str = "AAPL", registry_dir: str | None = None):
         "model": "xgb_classifier",
         "created": dt.datetime.now(dt.timezone.utc).isoformat(),
         "features": [str(c) for c in X.columns],
-        "metrics": {"logloss": logloss, "auc": auc},
-        "samples": int(len(X)),
+        "metrics": {
+            "logloss_train": float(logloss_train),
+            "auc_train": float(auc_train),
+            "logloss_val": float(logloss_val),
+            "auc_val": float(auc_val),
+        },
+        "calibration": calibration,
+        "samples": {"total": int(len(X)), "train": int(len(y_train)), "val": int(len(y_val))},
         "ticker": ticker.upper(),
     }
     with open(meta_path, "w") as f:
