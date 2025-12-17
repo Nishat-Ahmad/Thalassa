@@ -2,6 +2,7 @@ import os
 import socket
 from datetime import datetime, timezone
 from urllib.parse import urlparse, urlunparse
+from urllib.request import urlopen
 
 
 def _maybe_fix_prefect_api_url_env() -> None:
@@ -25,13 +26,37 @@ def _maybe_fix_prefect_api_url_env() -> None:
     if parsed.hostname != "prefect":
         return
 
-    try:
-        socket.gethostbyname("prefect")
-        return
-    except Exception:
-        pass
+    def _health_url(api_url: str) -> str:
+        # api_url is typically http://<host>:4200/api
+        return api_url.rstrip("/") + "/health"
 
-    os.environ["PREFECT_API_URL"] = urlunparse(parsed._replace(netloc="localhost:4200"))
+    def _is_healthy(api_url: str, timeout_s: float = 1.5) -> bool:
+        try:
+            with urlopen(_health_url(api_url), timeout=timeout_s) as resp:
+                status = getattr(resp, "status", None)
+                if status is None:
+                    # Some Python builds may not expose .status; treat as success if no exception.
+                    return True
+                return 200 <= int(status) < 300
+        except Exception:
+            return False
+
+    # If the docker hostname works and is a real Prefect API, keep it.
+    if _is_healthy(prefect_api_url):
+        return
+
+    # Fall back to localhost when running on host.
+    localhost_url = urlunparse(parsed._replace(netloc="localhost:4200"))
+    if _is_healthy(localhost_url):
+        os.environ["PREFECT_API_URL"] = localhost_url
+        return
+
+    # Final fallback: if nothing is reachable, unset PREFECT_API_URL so Prefect can use
+    # its default (often an ephemeral/local API) instead of hard-failing.
+    try:
+        del os.environ["PREFECT_API_URL"]
+    except KeyError:
+        pass
 
 
 _maybe_fix_prefect_api_url_env()

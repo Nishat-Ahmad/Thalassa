@@ -19,7 +19,7 @@ from ..core import (
     forecast_path,
     association_path,
 )
-from ..services.models import load_xgb, align_to_booster_features
+from ..services.models import load_xgb, align_to_booster_features, forecast_regressor_next_days
 import logging
 
 try:
@@ -328,7 +328,7 @@ def contact_page(request: Request):
 @router.get("/upload", response_class=HTMLResponse)
 def upload_page(request: Request):
     # Show the upload page and, if a ticker is provided or a registry entry exists,
-    # predict for the most recent week of ingested features and render results.
+    # predict the next week (7 business days) and render results.
     t = _safe_ticker(request.query_params.get("ticker"))
     ts = request.query_params.get("ts")
     # Try loading model and features; if unavailable, render page without predictions
@@ -400,18 +400,30 @@ def upload_page(request: Request):
             },
         )
 
-    # try sorting by date if present and take latest 7 rows
+    # sort by date if present
     try:
         if "date" in df.columns:
             df = df.copy()
             df["date"] = pd.to_datetime(df["date"], errors="coerce")
             df = df.sort_values("date").reset_index(drop=True)
-        latest_df = df.tail(7).reset_index(drop=True)
     except Exception:
-        latest_df = df.tail(7).reset_index(drop=True)
+        pass
 
     try:
-        df_aligned = align_to_booster_features(latest_df, feat_names)
+        dates, preds = forecast_regressor_next_days(df=df, booster=booster, feat_names=feat_names, days=7)
+    except HTTPException as e:
+        return templates.TemplateResponse(
+            "upload.html",
+            {
+                "request": request,
+                "title": "Upload",
+                "year": datetime.datetime.now().year,
+                "error": e.detail,
+                "ticker": t,
+                "ts": ts,
+                "model_meta": model_meta,
+            },
+        )
     except Exception:
         return templates.TemplateResponse(
             "upload.html",
@@ -419,34 +431,12 @@ def upload_page(request: Request):
                 "request": request,
                 "title": "Upload",
                 "year": datetime.datetime.now().year,
+                "error": "Failed to compute next-7-day predictions.",
                 "ticker": t,
                 "ts": ts,
                 "model_meta": model_meta,
             },
         )
-
-    try:
-        dmat = xgb.DMatrix(df_aligned)
-        preds = booster.predict(dmat)
-    except Exception:
-        return templates.TemplateResponse(
-            "upload.html",
-            {
-                "request": request,
-                "title": "Upload",
-                "year": datetime.datetime.now().year,
-                "ticker": t,
-                "ts": ts,
-                "model_meta": model_meta,
-            },
-        )
-
-    dates = None
-    if "date" in latest_df.columns:
-        try:
-            dates = pd.to_datetime(latest_df["date"]).dt.strftime("%Y-%m-%d").tolist()
-        except Exception:
-            dates = latest_df["date"].astype(str).tolist()
 
     return templates.TemplateResponse(
         "upload.html",
@@ -454,7 +444,7 @@ def upload_page(request: Request):
             "request": request,
             "title": "Upload",
             "year": datetime.datetime.now().year,
-            "predictions": [float(x) for x in preds.tolist()],
+            "predictions": [float(x) for x in preds],
             "count": int(len(preds)),
             "dates": dates,
             "ticker": t,
@@ -532,8 +522,17 @@ def upload_predict(
             },
         )
 
+    # sort by date if present
     try:
-        df_aligned = align_to_booster_features(df, feat_names)
+        if "date" in df.columns:
+            df = df.copy()
+            df["date"] = pd.to_datetime(df["date"], errors="coerce")
+            df = df.sort_values("date").reset_index(drop=True)
+    except Exception:
+        pass
+
+    try:
+        dates, preds = forecast_regressor_next_days(df=df, booster=booster, feat_names=feat_names, days=7)
     except HTTPException as e:
         return templates.TemplateResponse(
             "upload.html",
@@ -547,23 +546,6 @@ def upload_predict(
                 "model_meta": model_meta,
             },
         )
-    except Exception:
-        return templates.TemplateResponse(
-            "upload.html",
-            {
-                "request": request,
-                "title": "Upload",
-                "year": datetime.datetime.now().year,
-                "error": "Failed to align features for prediction.",
-                "ticker": t,
-                "ts": ts,
-                "model_meta": model_meta,
-            },
-        )
-
-    try:
-        dmat = xgb.DMatrix(df_aligned)
-        preds = booster.predict(dmat)
     except Exception as e:
         return templates.TemplateResponse(
             "upload.html",
@@ -578,21 +560,13 @@ def upload_predict(
             },
         )
 
-    # prepare date column if present for display
-    dates = None
-    if "date" in df.columns:
-        try:
-            dates = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d").tolist()
-        except Exception:
-            dates = df["date"].astype(str).tolist()
-
     return templates.TemplateResponse(
         "upload.html",
         {
             "request": request,
             "title": "Upload",
             "year": datetime.datetime.now().year,
-            "predictions": [float(x) for x in preds.tolist()],
+            "predictions": [float(x) for x in preds],
             "count": int(len(preds)),
             "dates": dates,
             "ticker": t,

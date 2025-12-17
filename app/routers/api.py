@@ -7,6 +7,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import re
+from collections import deque
+from pandas.tseries.offsets import BDay
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
@@ -1173,8 +1176,13 @@ async def upload_csv(file: UploadFile = File(...)):
 
 
 @router.post("/predict-batch")
-async def predict_batch(ticker: str = Form("AAPL")):
-    # Predict using the pipeline-ingested features for the given ticker
+async def predict_batch(
+    ticker: str = Form("AAPL"), mode: str = Form("latest"), days: int = Form(1)
+):
+    # Predict using the pipeline-ingested features for the given ticker.
+    # Default behavior (mode="latest") returns a forward-looking prediction
+    # computed from the most recent feature row. Use mode="all" for legacy
+    # historical/backfilled predictions for every row.
     t = _safe_ticker(ticker)
     booster, feat_names = load_xgb(t)
     if booster is None or not feat_names:
@@ -1208,9 +1216,162 @@ async def predict_batch(ticker: str = Form("AAPL")):
             status_code=500, detail="Failed to align features for prediction"
         )
 
+    mode = (mode or "latest").lower()
+    # latest: predict using only the most recent feature row (forward-looking)
+    if mode != "all":
+        days = int(days or 1)
+        if days < 1:
+            days = 1
+        if days > 90:
+            days = 90
+
+        try:
+            if "date" in df.columns:
+                last_date = pd.to_datetime(df["date"].iloc[-1])
+                input_date = last_date.strftime("%Y-%m-%d")
+            else:
+                last_date = None
+                input_date = None
+        except Exception:
+            last_date = None
+            input_date = None
+
+        # For multi-step predictions we approximate future feature values by
+        # updating lag, sma, ema and vol features iteratively based on predicted closes.
+        if "Close" not in df.columns:
+            raise HTTPException(
+                status_code=400,
+                detail="Feature file missing 'Close' column; cannot perform multi-day forecast",
+            )
+
+        # collect historical windows for updating statistics
+        closes_hist = list(pd.to_numeric(df["Close"].dropna()).tail(200))
+        returns_hist = list(pd.to_numeric(df.get("return", pd.Series([])).dropna()).tail(200))
+
+        # prepare deques with newest first
+        closes = deque(closes_hist[::-1])
+        returns = deque(returns_hist[::-1])
+
+        # initial aligned feature row (as floats)
+        try:
+            last_feat = df_aligned.tail(1).iloc[0].to_dict()
+        except Exception:
+            raise HTTPException(status_code=500, detail="Failed to select latest row")
+
+        preds = []
+        predicted_dates = []
+
+        # determine max lag/window needed from feature names
+        max_needed = 1
+        sma_windows = {}
+        ema_windows = {}
+        for fn in feat_names:
+            m = re.match(r"lag_close_(\d+)$", fn)
+            if m:
+                max_needed = max(max_needed, int(m.group(1)))
+            m = re.match(r"lag_return_(\d+)$", fn)
+            if m:
+                max_needed = max(max_needed, int(m.group(1)))
+            m = re.match(r"sma_(\d+)$", fn)
+            if m:
+                w = int(m.group(1)); sma_windows[fn] = w; max_needed = max(max_needed, w)
+            m = re.match(r"ema_(\d+)$", fn)
+            if m:
+                w = int(m.group(1)); ema_windows[fn] = w; max_needed = max(max_needed, w)
+
+        # ensure deques are long enough
+        while len(closes) < max_needed:
+            closes.append(0.0)
+        while len(returns) < max_needed:
+            returns.append(0.0)
+
+        current_close = float(closes[0])
+
+        for step in range(1, days + 1):
+            # build feature vector for this step based on last_feat and updated deques
+            fv = {}
+            for fn in feat_names:
+                # lag close
+                m = re.match(r"lag_close_(\d+)$", fn)
+                if m:
+                    k = int(m.group(1))
+                    fv[fn] = float(closes[k - 1]) if k - 1 < len(closes) else float(closes[-1])
+                    continue
+                m = re.match(r"lag_return_(\d+)$", fn)
+                if m:
+                    k = int(m.group(1))
+                    fv[fn] = float(returns[k - 1]) if k - 1 < len(returns) else float(returns[-1])
+                    continue
+                # sma
+                if fn in sma_windows:
+                    w = sma_windows[fn]
+                    old = float(last_feat.get(fn, 0.0) or 0.0)
+                    # update simple moving average with new close
+                    new_sma = (old * (w - 1) + current_close) / float(w)
+                    fv[fn] = new_sma
+                    continue
+                # ema
+                if fn in ema_windows:
+                    w = ema_windows[fn]
+                    old = float(last_feat.get(fn, 0.0) or 0.0)
+                    alpha = 2.0 / (w + 1)
+                    new_ema = alpha * current_close + (1 - alpha) * old
+                    fv[fn] = new_ema
+                    continue
+                # vol_10
+                if fn == "vol_10":
+                    vals = list(returns)[:10]
+                    try:
+                        fv[fn] = float(np.std(vals)) if vals else float(last_feat.get(fn, 0.0) or 0.0)
+                    except Exception:
+                        fv[fn] = float(last_feat.get(fn, 0.0) or 0.0)
+                    continue
+                # default: reuse last feature value (for macd, rsi, etc.)
+                fv[fn] = float(last_feat.get(fn, 0.0) or 0.0)
+
+            # align order and predict
+            row = pd.DataFrame([fv], columns=[f for f in feat_names])
+            dmat = xgb.DMatrix(row)
+            pred = float(booster.predict(dmat)[0])
+            preds.append(pred)
+
+            # compute predicted close and update history deques
+            predicted_close = current_close * (1.0 + pred)
+            closes.appendleft(predicted_close)
+            returns.appendleft(pred)
+            # trim deques
+            while len(closes) > max_needed:
+                closes.pop()
+            while len(returns) > max_needed:
+                returns.pop()
+
+            # update last_feat to new fv so next iteration uses updated sma/ema
+            last_feat.update(fv)
+            # set current_close for next iter
+            current_close = float(predicted_close)
+
+            # predicted date (business day) when possible
+            if last_date is not None:
+                try:
+                    pd_date = last_date + BDay(step)
+                    predicted_dates.append(pd_date.strftime("%Y-%m-%d"))
+                except Exception:
+                    predicted_dates.append(None)
+            else:
+                predicted_dates.append(None)
+
+        return {
+            "mode": "latest",
+            "count": len(preds),
+            "input_date": input_date,
+            "predicted_for": predicted_dates,
+            "predictions": preds,
+        }
+
+    # mode == all: legacy behavior — predict for every aligned row
     dmatrix = xgb.DMatrix(df_aligned)
     preds = booster.predict(dmatrix)
-    return {"count": int(len(preds)), "predictions": preds.tolist()}
+    return {"mode": "all", "count": int(len(preds)), "predictions": preds.tolist()}
 
 
 @router.get("/forecast")

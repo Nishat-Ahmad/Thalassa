@@ -16,15 +16,25 @@
         <div><strong>Ticker:</strong> {{ model_meta.ticker if model_meta.ticker else ticker }}</div>
         <div><strong>Created:</strong> {{ model_meta.created_at if model_meta.created_at else '-' }}</div>
         <div><strong>Features:</strong> {{ (model_meta.features|length) if model_meta.features is defined else 'N/A' }}</div>
-        {% if model_meta.metrics is defined %}
-          <div><strong>RMSE:</strong> {% if model_meta.metrics.rmse is defined %}{{ '%.5f'|format(model_meta.metrics.rmse) }}{% else %}-{% endif %}</div>
-          <div><strong>MAE:</strong> {% if model_meta.metrics.mae is defined %}{{ '%.5f'|format(model_meta.metrics.mae) }}{% else %}-{% endif %}</div>
-        {% endif %}
       </div>
-      <p class="muted" style="margin-top:8px;">This model predicts the next-day fractional return (decimal).</p>
     </div>
   </div>
   {% endif %}
+
+  <!-- Middle column: Metrics card placed between Model Summary and Ticker form -->
+  <div style="width:300px;min-width:220px;">
+    <div class="panel" style="padding:12px;">
+      <h3 style="margin-top:0;margin-bottom:8px;">Metrics (Next-day Return)</h3>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        {% if model_meta is defined and model_meta.metrics is defined %}
+          <div><strong>RMSE:</strong> {% if model_meta.metrics.rmse is defined %}{{ '%.5f'|format(model_meta.metrics.rmse) }}{% else %}-{% endif %}</div>
+          <div><strong>MAE:</strong> {% if model_meta.metrics.mae is defined %}{{ '%.5f'|format(model_meta.metrics.mae) }}{% else %}-{% endif %}</div>
+        {% else %}
+          <div class="muted">No metrics found in registry metadata.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
 
   <div style="flex:1;min-width:260px;max-width:820px;">
     <div class="panel" style="padding:12px;">
@@ -45,7 +55,7 @@
 
 {% if predictions is defined and predictions is not none %}
 <section class="section-header">
-  <h2>Predictions for {{ ticker }}</h2>
+  <h2>Next 7 Days Predictions for {{ ticker }}</h2>
 </section>
 
 <div>

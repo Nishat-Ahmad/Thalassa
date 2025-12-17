@@ -1,6 +1,7 @@
 import os
 import socket
 from urllib.parse import urlparse, urlunparse
+from urllib.request import urlopen
 
 
 def _maybe_fix_prefect_api_url_env() -> None:
@@ -22,13 +23,33 @@ def _maybe_fix_prefect_api_url_env() -> None:
     if parsed.hostname != "prefect":
         return
 
-    try:
-        socket.gethostbyname("prefect")
-        return
-    except Exception:
-        pass
+    def _health_url(api_url: str) -> str:
+        return api_url.rstrip("/") + "/health"
 
-    os.environ["PREFECT_API_URL"] = urlunparse(parsed._replace(netloc="localhost:4200"))
+    def _is_healthy(api_url: str, timeout_s: float = 1.5) -> bool:
+        try:
+            with urlopen(_health_url(api_url), timeout=timeout_s) as resp:
+                status = getattr(resp, "status", None)
+                if status is None:
+                    return True
+                return 200 <= int(status) < 300
+        except Exception:
+            return False
+
+    if _is_healthy(prefect_api_url):
+        return
+
+    localhost_url = urlunparse(parsed._replace(netloc="localhost:4200"))
+    if _is_healthy(localhost_url):
+        os.environ["PREFECT_API_URL"] = localhost_url
+        return
+
+    # If neither docker-hostname nor localhost is reachable, drop the override so Prefect
+    # can fall back to its default API behavior.
+    try:
+        del os.environ["PREFECT_API_URL"]
+    except KeyError:
+        pass
 
 
 _maybe_fix_prefect_api_url_env()
