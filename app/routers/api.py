@@ -1274,10 +1274,14 @@ async def predict_batch(
                 max_needed = max(max_needed, int(m.group(1)))
             m = re.match(r"sma_(\d+)$", fn)
             if m:
-                w = int(m.group(1)); sma_windows[fn] = w; max_needed = max(max_needed, w)
+                w = int(m.group(1)); 
+                sma_windows[fn] = w; 
+                max_needed = max(max_needed, w)
             m = re.match(r"ema_(\d+)$", fn)
             if m:
-                w = int(m.group(1)); ema_windows[fn] = w; max_needed = max(max_needed, w)
+                w = int(m.group(1)); 
+                ema_windows[fn] = w; 
+                max_needed = max(max_needed, w)
 
         # ensure deques are long enough
         while len(closes) < max_needed:

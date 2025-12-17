@@ -1,5 +1,5 @@
 # tools/check_regressor_baseline.py
-import os, json
+import os
 import numpy as np
 import pandas as pd
 

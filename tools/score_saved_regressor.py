@@ -1,6 +1,8 @@
 # tools/score_saved_regressor.py
-import os, json
-import numpy as np, pandas as pd
+import os
+import json
+import numpy as np
+import pandas as pd
 import xgboost as xgb
 
 TICKER="SHOP.TO"

@@ -1,5 +1,4 @@
 import os
-import socket
 from datetime import datetime, timezone
 from urllib.parse import urlparse, urlunparse
 from urllib.request import urlopen

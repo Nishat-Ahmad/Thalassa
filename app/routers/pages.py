@@ -19,7 +19,7 @@ from ..core import (
     forecast_path,
     association_path,
 )
-from ..services.models import load_xgb, align_to_booster_features, forecast_regressor_next_days
+from ..services.models import load_xgb, forecast_regressor_next_days
 import logging
 
 try:
