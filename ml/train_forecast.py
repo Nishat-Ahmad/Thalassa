@@ -1,6 +1,6 @@
 """
 Standalone ARIMA forecast trainer (mirrors forecast_ts in flows/flow.py).
-Loads a feature parquet/CSV with a Close column, fits ARIMA(0,1,0), and writes
+Loads a feature parquet/CSV with a Close column, fits ARIMA(1,1,1), and writes
 forecast_{ticker}.json into the registry directory.
 """
 
@@ -47,7 +47,7 @@ def fit_arima(df: pd.DataFrame, horizon: int):
         series = series.asfreq(freq).ffill()
     else:
         series = df["Close"].astype(float)
-    order = (0, 1, 0)
+    order = (1, 1, 1)
     model = ARIMA(series, order=order)
     fitted = model.fit()
     forecast = fitted.forecast(steps=horizon)

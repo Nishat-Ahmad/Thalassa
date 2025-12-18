@@ -1197,7 +1197,7 @@ async def forecast_page_submit(
                     if freq is None:
                         freq = "D"
                     series = series.asfreq(freq).ffill()
-                    order = (0, 1, 0)
+                    order = (1, 1, 1)
                     model = ARIMA(series, order=order)
                     fitted = model.fit()
                     fc_vals = fitted.forecast(steps=horizon)
@@ -1546,6 +1546,3 @@ def association_page(request: Request, ticker: str | None = None):
             "ticker": t,
         },
     )
-
-
-# Selection persistence removed — association page is read-only
