@@ -1,4 +1,4 @@
-\documentclass[conference, onecolumn]{IEEEtran}
+\documentclass[conference]{IEEEtran}
 
 % Required packages
 \usepackage{cite}
@@ -31,11 +31,10 @@
 }
 
 % Title and Author setup
-\title{Thalassa: Finance ML System\\
-\large Project Report}
+\title{Thalassa: Finance ML Project}
 
 \author{\IEEEauthorblockN{Nishat Ahmad}
-\IEEEauthorblockA{\textit{Domain: Economics \& Finance} \\
+\IEEEauthorblockA{\textit{Reg No # 2023574} \\
 \textit{Tech Stack: Python 3.11, FastAPI, Prefect, Docker, GitHub Actions}\\
 \today}
 }
@@ -46,7 +45,7 @@
 
 % Abstract
 \begin{abstract}
-This project addresses the gap in financial machine learning by implementing an automated, end-to-end ML system that turns a manual research workflow into a repeatable MLOps pipeline. The system ingests market data using \texttt{yfinance} with retries and timeouts; engineers time-series features (rolling statistics, momentum indicators, lags); trains multiple models (classification, regression, forecasting) and unsupervised modules (PCA, KMeans); and produces versioned artifacts (models, metadata, and diagnostics) and exposes them through an API.
+This project addresses the gap in financial machine learning by implementing an automated, end-to-end ML system that turns a manual workflow into a repeatable MLOps pipeline. The system ingests market data using \texttt{yfinance} with retries and timeouts; engineers time-series features (rolling statistics, momentum indicators, lags); trains multiple models (classification, regression, forecasting) and unsupervised modules (PCA, KMeans); and produces versioned artifacts (models, metadata, and diagnostics) and exposes them through an API.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -54,46 +53,82 @@ Finance ML, MLOps, Time Series, Automation, Docker
 \end{IEEEkeywords}
 
 \section{Introduction \& Problem Statement}
-Financial time series are noisy, non-stationary, and influenced by stochastic shocks (macro events, liquidity regimes, and sentiment). In practice, teams often begin with notebooks that download data, compute features, train a model, and visually inspect results. While effective for exploration, notebook-driven workflows are difficult to reproduce, hard to validate systematically, and fragile to operationalize (changing dependencies, inconsistent data snapshots, and manual re-runs).
+Financial time series are noisy, non-stationary, and influenced by stochastic shocks (macro events, liquidity regimes, and sentiment). In practice, teams often begin with notebooks that download data, compute features, train a model, and visually inspect results [1], [2]. While effective for exploration, notebook-driven workflows are difficult to reproduce, hard to validate systematically, and fragile to operationalize (changing dependencies, inconsistent data snapshots, and manual re-runs).
 
 The core problem statement is: \textit{How can we reliably train, validate, version, and serve financial ML models on continually drifting market data without relying on manual, error-prone notebook execution?}
 
 \section{ML Experiments \& Comparison}
-Thalassa runs multiple ML tasks in one orchestration flow, enabling side-by-side experimentation and comparison across supervised and unsupervised approaches.
+Thalassa runs multiple ML tasks in one orchestration flow, enabling side-by-side experimentation.
 
 \subsection{Prediction (Supervised Learning)}
 \begin{itemize}
-  \item \textbf{XGBoost Regressor:} Predicts next-day return using engineered features. The training code performs an 80/20 temporal split and reports regression metrics such as RMSE and MAE (computed on the held-out split).
-  \item \textbf{XGBoost Classifier:} Predicts next-day direction (Up/Down) using a binary logistic objective. The model trains with early stopping against a validation split and reports probabilistic metrics including \textbf{Logloss} and \textbf{AUC}. In addition, the training pipeline computes calibration statistics (e.g., Brier score and calibration curve bins) to assess reliability of predicted probabilities.
+    \item \textbf{XGBoost Regression (Return Prediction)}
+    The system employs Gradient Boosted Decision Trees (XGBoost) to predict the next-day fractional return by building an ensemble of regression trees that sequentially fit the residuals of prior trees. This model was selected because it prevents overfitting better than simpler linear models. The prediction target is defined as the next-day return, also  the input matrix comprises engineered numeric features. To prevent look-ahead bias, the data is split chronologically into an 80\% training set and a 20\% hold-out test set, with the model minimizing squared error loss subject to regularization parameters like a 0.05 learning rate, a maximum depth of 4, and 0.8 subsampling. Post-training, the metadata is serialized in the versioned registry, allowing the inference engine to align incoming data to the stored feature order and generate forward-looking forecasts using the latest available row. [3].
+    \item \textbf{XGBoost Classifier (Directional Prediction)}
+    The system utilizes an XGBoost Classifier to predict the directional movement (Up/Down) of the asset by optimizing a binary logistic objective. This model was chosen because it can detect complex, non-straightforward market patterns and provides reliable probability estimates (e.g., '70\% chance of going up') rather than just simple Yes/No predictions. The target is constructed as a binary label based on the sign of the next-day return ($y > 0$), utilizing the same engineered feature set as the regression task. Data is split chronologically into 80\% training and 20\% validation sets. Key hyperparameters include a learning rate of 0.1, a maximum depth of 5, and 0.8 subsampling to maintain generalization. Final artifacts, e.g. calibration metadata, are serialized in the registry to ensure consistent inference on new data.
 \end{itemize}
 
 \subsection{Forecasting (Time Series)}
 \begin{itemize}
-  \item \textbf{ARIMA(1,1,1):} Fits a classical statistical model to the close-price series (frequency-inferred, forward-filled) and produces a multi-step forecast (default horizon 7). Saved outputs include predictions, confidence intervals, and model selection diagnostics (AIC/BIC) plus residual-based error summaries.
+  \item \textbf{ARIMA Forecast (Price Trajectory)}
+    The system applies an Autoregressive Integrated Moving Average (ARIMA) model to generate multi-step forecasts of the asset's closing price. This model was chosen because it serves as a reliable standard for comparison and, unlike complex AI models that hide their math, it provides clear 'best case' and 'worst case' price ranges to show how uncertain the future prediction is. It looks only at the history of the Closing price itself. Before running, it fills in any missing data (like holidays) to ensure a smooth timeline, and it stabilizes the trend—making it easier to predict—by looking at day-to-day price changes rather than raw dollar amounts. A default order of $(1,1,1)$ is employed to balance autoregressive trends with moving average error correction, with parameters estimated via maximum likelihood. Final artifacts, including point predictions for a 7-day horizon, confidence bounds, and diagnostics (AIC/BIC), are serialized in the registry to support risk assessment and visual analysis [4].
 \end{itemize}
 
 \subsection{Clustering \& Representation Learning (Unsupervised)}
 \begin{itemize}
-  \item \textbf{PCA:} Reduces feature dimensionality (default up to 5 components). Outputs include explained variance ratio, component vectors, and scaling parameters to support downstream visualization and analysis.
-  \item \textbf{KMeans:} Clusters feature vectors into regimes (default 5 clusters). Outputs include inertia, cluster centers, and label counts to summarize regime distribution.
+    \item \textbf{Principal Component Analysis}
+    The system employs Principal Component Analysis (PCA) to compress the high-dimensional engineered feature set into a compact low-dimensional embedding. This technique was chosen because it simplifies the mess of around a 2 dozen of noisy market features into just a few key signals, making it much easier to spot patterns. The pipeline first standardizes inputs to ensure equal weighting across diverse features (e.g., Price vs. RSI), then performs singular value decomposition to identify orthogonal components. The resulting embeddings and scaler parameters are serialized in the registry, serving as the foundational input for the content-based recommendation engine (Nearest Neighbors) and downstream cluster analysis.
+    \item \textbf{K-Means Clustering}
+    The system implements K-Means clustering to partition the diverse history of market data into distinct behavioral groups. This method was chosen because it automatically organizes thousands of messy trading days into a few clear "regimes"—such as "stable growth" or "chaotic volatility"—without requiring manual labeling, simply by grouping days that look statistically similar.  The pipeline operates on the standardized feature set, with a default value of $k=5$ clusters. The final cluster centers and labels are serialized in the registry, enabling the system to instantly classify new market conditions by mapping them to these established historical patterns.[5].
+    \item \textbf{Apriori Algorithm}
+    The system employs the Apriori algorithm to discover hidden relationships between different market indicators.  This method was selected because it acts like a "market detective," automatically generating simple "if-then" rules (e.g., "If Volume is High AND Price is rising, THEN the trend usually continues") that reveal how different signals trigger one another, rather than just predicting a final number. To do this, the pipeline first converts continuous numerical data into binary tags—such as "High Volume" or "Price Above Average"—and then iteratively scans the history to find combinations that occur frequently. The resulting high-confidence rules are filtered by their statistical strength (lift) and serialized in the registry, providing a readable list of historical probabilities that can be used to validate trading strategies.
 \end{itemize}
+
+\begin{table}[htbp]
+\caption{Model Technical Metrics Summary}
+\label{tab:model-registry}
+\begin{center}
+
+% \resizebox forces the table to fit exactly within the current column width
+\resizebox{\columnwidth}{!}{%
+\renewcommand{\arraystretch}{1.4} % Adds vertical padding
+\begin{tabular}{|l|p{2.5cm}|c|p{2.2cm}|p{4.5cm}|}
+\hline
+\textbf{Model} & \textbf{Used for} & \textbf{Feat.} & \textbf{Metrics} & \textbf{Hyperparameters (settings)} \\
+\hline
+\textbf{XGB Regressor} & Next-day return forecasting & 26 & RMSE; MAE & n\_estimators=300, max\_depth=4, learning\_rate=0.05, random\_state=42; time split 80/20 chronological \\
+\hline
+\textbf{XGB Classifier} & Next-day direction (up/down) classification & 26 & AUC; Logloss & objective=binary:logistic, max\_depth=5, subsample=0.8, seed=42, early\_stopping\_rounds=10 \\
+\hline
+\textbf{ARIMA Forecast} & Close-price forecasting for a fixed horizon & N/A & Residual RMSE; MAE; AIC; BIC & order=(1,1,1); horizon default 7 \\
+\hline
+\textbf{PCA Embedding} & Dimensionality reduction & 27 & Cumulative explained variance & n\_components=5) \\
+\hline
+\textbf{KMeans Clustering} & Regime/behavior clustering over feature vectors & 27 & Inertia; label counts & n\_clusters=5, random\_state=42 \\
+\hline
+\textbf{Association Rules} & Pattern mining on derived boolean data & N/A & n\_rules; support confidence lift & min\_support=0.05, min\_confidence=0.5, max\_rules=100 \\
+\hline
+\end{tabular}%
+}
+\end{center}
+\end{table}
 
 \subsection{Comparison Guidance}
 In finance, the ``best'' model is often task-dependent:
 \begin{itemize}
   \item For trading-like binary decisions, AUC summarizes ranking ability while Logloss reflects probability quality; calibration metrics help quantify reliability.
   \item For continuous return modeling, RMSE/MAE measure error magnitude but must be interpreted in the context of return scale and regime volatility.
-  \item For forecasting, ARIMA offers interpretability and strong baselines; AIC/BIC help compare fit quality, while residual diagnostics signal misspecification.
+  \item For forecasting, ARIMA offers interpretability and strong baselines; AIC/BIC help compare fit quality.
   \item For exploratory structure, PCA and KMeans help detect latent factors and market regimes, serving both analysis and feature compression.
 \end{itemize}
 
 \section{System Architecture}
-Thalassa is designed as a modular system that separates orchestration, serving, and artifact persistence.
+Thalassa is designed as a modular system that separates orchestration, serving, and artifact persistence [6].
 
 \begin{figure}[htbp]
   \centering
   % Make sure the filename inside {} matches exactly what you uploaded
-  \includegraphics[width=0.8\linewidth]{system_arch.png}
+  \includegraphics[width=1\linewidth]{system_arch.png}
   \caption{High-level system architecture of Thalassa. The FastAPI service serves predictions/forecasts and can trigger the Prefect pipeline. Prefect Server coordinates runs, while the worker executes ETL + training. Artifacts are persisted to the filesystem as Parquet (data/features), JSON (metadata/forecasts/reports), UBJ (XGBoost models), and NPY (arrays), enabling deterministic reuse across services.}
   \label{fig:system-architecture}
 \end{figure}
@@ -126,10 +161,13 @@ Thalassa uses Docker for reproducibility and Docker Compose for local multi-serv
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.8\linewidth]{container_workflow.png}
+  \includegraphics[width=1.05\linewidth]{container_workflow.png}
   \caption{Containerization workflow. Docker ensures dependency and runtime consistency (Python 3.11 + ML libraries). Docker Compose coordinates multiple services and uses shared volumes so pipeline outputs are instantly available to the API without copying.}
   \label{fig:container-workflow}
 \end{figure}
+
+\subsection{External Access (ngrok)}
+To facilitate development, demonstrations, and external integration testing, the system employs \texttt{ngrok} to securely tunnel local services to the public internet. This specifically exposes the FastAPI endpoints (port 8000) and optionally the Prefect UI (port 4200). This approach enables validation of end-to-end prediction routes under production-like conditions. This method provides temporary access without the security risk of permanently opening ports on the host network.
 
 \section{CI/CD Pipeline Explanation}
 The project uses GitHub Actions to enforce code quality, run tests, execute the pipeline, validate outputs, and finally build/push a Docker image.
@@ -178,8 +216,8 @@ The Prefect flow (\texttt{flows/flow.py}) orchestrates the end-to-end pipeline w
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.8\linewidth]{prefect_flow.png}
-  \caption{Prefect orchestration in Thalassa. Tasks are isolated, retryable, and produce explicit artifacts that can be reused by downstream steps and by the serving layer.}
+  \includegraphics[width=1.02\linewidth]{prefect_flow.png}
+  \caption{Prefect orchestration in Thalassa. Tasks are isolated, retryable, and produce explicit artifacts.}
   \label{fig:prefect-flow}
 \end{figure}
 
@@ -191,13 +229,13 @@ The system downloads historical OHLCV market data using \texttt{yfinance}. The i
 
 \subsection{Feature engineering (feature layer)}
 The pipeline constructs engineered features. Table \ref{tab:feature-lookup} provides a lookup reference for the core technical indicators used.
-
-% LOOKUP TABLE ADDED HERE
 \begin{table}[htbp]
 \caption{Feature Engineering Lookup Table}
 \label{tab:feature-lookup}
 \begin{center}
-\begin{tabular}{|l|l|p{9cm}|}
+% Scales the table to the exact width of a single column
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{|l|l|p{5.5cm}|}
 \hline
 \textbf{Feature} & \textbf{Type} & \textbf{Description \& Purpose} \\
 \hline
@@ -211,11 +249,12 @@ Volatility & Risk & Rolling standard deviation of returns. High values indicate 
 \hline
 Lags & Memory & Past values (e.g., $t-1, t-7$) shifted to the current row. Allows the model to ``see'' history explicitly. \\
 \hline
-\end{tabular}
+\end{tabular}%
+}
 \end{center}
 \end{table}
 
-These features are persisted as Parquet in \texttt{ml/features/}.
+These features are persisted as Parquet in \texttt{ml/features/} [7].
 
 \subsection{Modeling (model layer)}
 Supervised models train on engineered features:
@@ -244,29 +283,52 @@ FastAPI exposes endpoints for health checks, triggering pipelines, prediction, c
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.8\linewidth]{methodology_flow.png}
+  \includegraphics[width=1.02\linewidth]{methodology_flow.png}
   \caption{End-to-end methodology in Thalassa. The pipeline operationalizes data collection, feature engineering, training, validation, and serving into a repeatable MLOps loop, with filesystem-based artifact versioning as the system of record.}
   \label{fig:methodology-flow}
 \end{figure}
 
-\section{Final Observations, Limitations, \& Future Work}
+\section{CONCLUSION}
 
-\textbf{Observations:} Thalassa demonstrates that a single orchestrated workflow can support multiple finance ML tasks while maintaining reproducibility through artifact versioning. For classification, probability quality is emphasized using Logloss and AUC, supplemented by calibration statistics (e.g., Brier score and calibration bins) to evaluate reliability. For regression and forecasting, the system records error summaries (RMSE/MAE) and ARIMA diagnostics (AIC/BIC), supporting transparent model comparison.
+\textbf{Final Observations:} This project demonstrates that a single orchestrated workflow can support multiple finance ML tasks while maintaining reproducibility through artifact versioning. For classification, probability quality is emphasized using Logloss and AUC, supplemented by calibration statistics (e.g., Brier score and calibration bins) to evaluate reliability. For regression and forecasting, the system records error summaries (RMSE/MAE) and ARIMA diagnostics (AIC/BIC), supporting transparent model comparison.
 
-\textbf{Limitations:}
-\begin{itemize}
-  \item \textbf{Data-source dependency:} Reliance on \texttt{yfinance} introduces fragility (rate limits, outages, and changing symbol metadata).
-  \item \textbf{Non-stationarity and drift:} Market regimes change; historical performance may not translate to future periods.
-  \item \textbf{Overfitting risk:} Tree-based learners can overfit engineered indicators, especially without walk-forward validation and careful leakage controls.
-  \item \textbf{Forecasting simplicity:} ARIMA provides a strong baseline but may underfit complex dynamics and volatility clustering.
-\end{itemize}
+\textbf{Limitations:} The system relies on \texttt{yfinance}, which introduces fragility through potential rate limits, outages, and inconsistent symbol metadata. Furthermore, financial data is subject to non-stationarity and concept drift, meaning historical performance may not reliably translate to future market regimes. There is also a risk that tree-based learners may overfit engineered indicators without rigorous leakage controls. Finally, while ARIMA serves as a robust baseline, its simplicity may lead to underfitting when faced with complex market dynamics and volatility clustering.
 
-\textbf{Future work:}
-\begin{itemize}
-  \item \textbf{Real-time/streaming ingestion:} Replace batch downloads with streaming feeds, incremental feature computation, and near-real-time inference.
-  \item \textbf{Stronger validation:} Add walk-forward cross-validation, stability metrics, and improved drift detection (multivariate drift, seasonality-aware checks).
-  \item \textbf{Richer models:} Explore volatility-aware approaches, probabilistic forecasting, and deep time-series models where justified (while balancing operational complexity).
-  \item \textbf{Registry hardening:} Move from filesystem-only artifacts to a dedicated model registry/feature store and introduce explicit promotion stages.
-\end{itemize}
+\textbf{Future work:} Future iterations will prioritize \textbf{stronger validation} by adding stability metrics and improved drift detection mechanisms, such as multivariate and seasonality-aware checks. The system also aims to implement \textbf{contextual data augmentation} to automatically incorporate peer-group data and capture sector-wide correlations. Research will expand into \textbf{richer models}, exploring volatility-aware approaches and probabilistic forecasting where complexity is justified. Finally, operational improvements will focus on \textbf{registry hardening} by migrating from filesystem artifacts to a dedicated model registry with explicit promotion stages. Additionally, we plan to implement \textbf{smart caching execution}; if the registry already contains a valid, up-to-date model and dataset for a requested ticker, the system will serve the existing artifact immediately rather than triggering a redundant end-to-end pipeline run.
+
+\section*{Acknowledgment}
+I would like to expresses sincere gratitude to both the instructors for giving us a project that pushed us to learn a lot of different industry standard tools and go through the full MLOps experience in this project. Moreover, I would also like to show my gratitude the open-source contributors behind the Python ecosystem, Prefect and FastAPI. Special thanks are due to the maintainers of the \texttt{yfinance} library for making one of the best API for stocks that I know about as not only can it pull information related to any company whose ticker exists  yahoo finance, but also all the crypto currencies as well. Moreover, special thanks to the people who documented docker and CI / CD pipeline.
+
+\begin{thebibliography}{00}
+
+% [1] Algorithmic Trading Concepts
+\bibitem{investopedia_algo}
+S. Seth, ``Basics of Algorithmic Trading: Concepts and Examples,'' \textit{Investopedia}, 2024. [Online]. Available: \url{https://www.investopedia.com/articles/active-trading/101014/basics-algorithmic-trading-concepts-and-examples.asp}
+
+% [2] Backtesting & Data Challenges
+\bibitem{quantstart_backtest}
+M. Halls-Moore, ``Successful Backtesting of Algorithmic Trading Strategies - Part I,'' \textit{QuantStart}, 2023. [Online]. Available: \url{https://www.quantstart.com/articles/Successful-Backtesting-of-Algorithmic-Trading-Strategies-Part-I/}
+
+% [3] XGBoost Official Docs
+\bibitem{xgboost_docs}
+XGBoost Developers, ``XGBoost Documentation: Introduction to Boosted Trees,'' \textit{ReadTheDocs}, 2024. [Online]. Available: \url{https://xgboost.readthedocs.io/en/stable/tutorials/model.html}
+
+% [4] ARIMA (Hyndman Online Guide)
+\bibitem{hyndman_arima}
+R. J. Hyndman and G. Athanasopoulos, ``Forecasting: Principles and Practice (3rd ed) - Chapter 9: ARIMA Models,'' \textit{OTexts}, 2021. [Online]. Available: \url{https://otexts.com/fpp3/arima.html}
+
+% [5] Scikit-Learn Clustering/PCA
+\bibitem{sklearn_guide}
+Scikit-learn Developers, ``User Guide: Clustering and Decomposition,'' \textit{Scikit-learn.org}, 2024. [Online]. Available: \url{https://scikit-learn.org/stable/modules/clustering.html}
+
+% [6] MLOps Architecture
+\bibitem{google_mlops}
+Google Cloud Architecture Center, ``MLOps: Continuous delivery and automation pipelines in machine learning,'' \textit{Google Cloud}, 2024. [Online]. Available: \url{https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning}
+
+% [7] Technical Indicators
+\bibitem{investopedia_tech}
+J. Chen, ``Technical Indicator: Definition, Types, and Examples,'' \textit{Investopedia}, 2024. [Online]. Available: \url{https://www.investopedia.com/terms/t/technicalindicator.asp}
+
+\end{thebibliography}
 
 \end{document}
