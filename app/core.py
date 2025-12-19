@@ -149,7 +149,7 @@ def pca_paths(ticker: str | None = None, run_dir: str | None = None) -> tuple[st
         except Exception:
             pass
 
-    # fallback to flat registry for backward compatibilit
+    # fallback to flat registry for backward compatibility
     if run_dir is None and not os.path.exists(meta):
         meta = os.path.join(MODEL_REGISTRY, f"pca_{t}.json")
         transformed = os.path.join(MODEL_REGISTRY, f"pca_transformed_{t}.npy")

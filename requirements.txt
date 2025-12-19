@@ -1,6 +1,8 @@
 fastapi
 uvicorn
+jinja2
 prefect
+requests
 yfinance
 pandas
 numpy
@@ -8,9 +10,9 @@ scikit-learn
 deepchecks[ml]
 pyarrow
 pytest
+httpx
 python-multipart
 xgboost
 statsmodels
 mlxtend
-pyarrow
 fastparquet
