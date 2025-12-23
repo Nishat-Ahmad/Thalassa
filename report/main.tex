@@ -35,7 +35,6 @@
 
 \author{\IEEEauthorblockN{Nishat Ahmad}
 \IEEEauthorblockA{\textit{Reg No # 2023574} \\
-\textit{Tech Stack: Python 3.11, FastAPI, Prefect, Docker, GitHub Actions}\\
 \today}
 }
 
@@ -96,17 +95,18 @@ Thalassa runs multiple ML tasks in one orchestration flow, enabling side-by-side
 \hline
 \textbf{Model} & \textbf{Used for} & \textbf{Feat.} & \textbf{Metrics} & \textbf{Hyperparameters (settings)} \\
 \hline
-\textbf{XGB Regressor} & Next-day return forecasting & 26 & RMSE; MAE & n\_estimators=300, max\_depth=4, learning\_rate=0.05, random\_state=42; time split 80/20 chronological \\
+\textbf{XGB Regressor} & Next-day return forecasting & 26 & RMSE=0.0188 & n\_estimators=300, max\_depth=4, learning\_rate=0.05, random\_state=42; time split 80/20 chronological \\
 \hline
-\textbf{XGB Classifier} & Next-day direction (up/down) classification & 26 & AUC; Logloss & objective=binary:logistic, max\_depth=5, subsample=0.8, seed=42, early\_stopping\_rounds=10 \\
+\textbf{XGB Classifier} & Next-day direction (up/down) classification & 26 & AUC=
+0.5307 & max\_depth=5, subsample=0.8, seed=42, early\_stopping\_rounds=10 \\
 \hline
-\textbf{ARIMA Forecast} & Close-price forecasting for a fixed horizon & N/A & Residual RMSE; MAE; AIC; BIC & order=(1,1,1); horizon default 7 \\
+\textbf{ARIMA Forecast} & Close-price forecasting for a fixed horizon & N/A & RMSE=0.937; AIC=44471.43 & order=(1,1,1); horizon default 7 \\
 \hline
-\textbf{PCA Embedding} & Dimensionality reduction & 27 & Cumulative explained variance & n\_components=5) \\
+\textbf{PCA Embedding} & Dimensionality reduction & 27 & Cumulative explained variance=81.90\% & n\_components=5) \\
 \hline
-\textbf{KMeans Clustering} & Regime/behavior clustering over feature vectors & 27 & Inertia; label counts & n\_clusters=5, random\_state=42 \\
+\textbf{KMeans Clustering} & Regime/behavior clustering over feature vectors & 27 & Inertia=127472.91; label counts= 0=1303, 1=1351, 2=1918, 3=1577, 4=5179 & n\_clusters=5, random\_state=42 \\
 \hline
-\textbf{Association Rules} & Pattern mining on derived boolean data & N/A & n\_rules; support confidence lift & min\_support=0.05, min\_confidence=0.5, max\_rules=100 \\
+\textbf{Association Rules} & Pattern mining on derived boolean data & N/A & n\_rules=4; support;  confidence; lift & min\_support=0.05, min\_confidence=0.5, max\_rules=100 \\
 \hline
 \end{tabular}%
 }
@@ -116,9 +116,9 @@ Thalassa runs multiple ML tasks in one orchestration flow, enabling side-by-side
 \subsection{Comparison Guidance}
 In finance, the ``best'' model is often task-dependent:
 \begin{itemize}
-  \item For trading-like binary decisions, AUC summarizes ranking ability while Logloss reflects probability quality; calibration metrics help quantify reliability.
-  \item For continuous return modeling, RMSE/MAE measure error magnitude but must be interpreted in the context of return scale and regime volatility.
-  \item For forecasting, ARIMA offers interpretability and strong baselines; AIC/BIC help compare fit quality.
+  \item For trading-like binary decisions, AUC summarizes ranking ability.
+  \item For continuous return modeling, RMSE measure error magnitude but must be interpreted in the context of return scale and regime volatility.
+  \item For forecasting, ARIMA offers interpretability and strong baselines; AIC help compare fit quality.
   \item For exploratory structure, PCA and KMeans help detect latent factors and market regimes, serving both analysis and feature compression.
 \end{itemize}
 
@@ -229,6 +229,7 @@ The system downloads historical OHLCV market data using \texttt{yfinance}. The i
 
 \subsection{Feature engineering (feature layer)}
 The pipeline constructs engineered features. Table \ref{tab:feature-lookup} provides a lookup reference for the core technical indicators used.
+
 \begin{table}[htbp]
 \caption{Feature Engineering Lookup Table}
 \label{tab:feature-lookup}
@@ -297,7 +298,7 @@ FastAPI exposes endpoints for health checks, triggering pipelines, prediction, c
 \textbf{Future work:} Future iterations will prioritize \textbf{stronger validation} by adding stability metrics and improved drift detection mechanisms, such as multivariate and seasonality-aware checks. The system also aims to implement \textbf{contextual data augmentation} to automatically incorporate peer-group data and capture sector-wide correlations. Research will expand into \textbf{richer models}, exploring volatility-aware approaches and probabilistic forecasting where complexity is justified. Finally, operational improvements will focus on \textbf{registry hardening} by migrating from filesystem artifacts to a dedicated model registry with explicit promotion stages. Additionally, we plan to implement \textbf{smart caching execution}; if the registry already contains a valid, up-to-date model and dataset for a requested ticker, the system will serve the existing artifact immediately rather than triggering a redundant end-to-end pipeline run.
 
 \section*{Acknowledgment}
-I would like to expresses sincere gratitude to both the instructors for giving us a project that pushed us to learn a lot of different industry standard tools and go through the full MLOps experience in this project. Moreover, I would also like to show my gratitude the open-source contributors behind the Python ecosystem, Prefect and FastAPI. Special thanks are due to the maintainers of the \texttt{yfinance} library for making one of the best API for stocks that I know about as not only can it pull information related to any company whose ticker exists  yahoo finance, but also all the crypto currencies as well. Moreover, special thanks to the people who documented docker and CI / CD pipeline.
+I would like to expresses sincere gratitude to both the instructors for giving us a project that pushed us to learn a lot of different industry standard tools and go through the full MLOps experience in this project.Moreover, I extend my gratitude to the open-source contributors of the Python ecosystem, particularly the maintainers of yfinance, Prefect, and FastAPI for their robust tooling. Special thanks are also due to the community behind Docker and CI/CD standards for the documentation that enabled the reliable infrastructure in this work
 
 \begin{thebibliography}{00}
 
